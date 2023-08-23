@@ -1,0 +1,18 @@
+[package]
+name = "trakt"
+description = "Load balancer for Minecraft Bedrock Edition"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.3.23", features = ["derive"] }
+log = "0.4.20"
+serde = { version = "1.0.185", features = ["derive"] }
+toml = "0.7.6"
+anyhow = "1.0"
+tokio = { version = "1.32.0", features = ["full"] }
+bytes = "1.4.0"
+simple_logger = "4.2.0"
+rand = "0.8.5"
+ppp = "2.2.0"
+

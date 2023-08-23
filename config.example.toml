@@ -1,0 +1,31 @@
+# Address to listen on.
+bind = "0.0.0.0:19132"
+
+# Address to create proxying UDP sockets on.
+# Changing it is only useful if you want to use a different network IP
+# for Proxy <-> Backend than for Player <-> Proxy.
+#
+# Please keep the port to 0 to let the OS allocate an available port for each client.
+proxy_bind = "0.0.0.0:0"
+
+# Load balancing method to use.
+#
+# Available: round_robin, least_connected
+load_balance_method = "round_robin"
+
+# Whether to send HAProxy info to the servers.
+# You may need to configure your server software to support it.
+proxy_protocol = true
+
+[backend]
+# Rate, in seconds, at which to fetch MOTD information.
+motd_refresh_rate = 20
+# Address of the server to ping to get MOTD information (including player count, etc).
+# Leave it commented out to fetch it from any of the configured servers below (recommended).
+#motd_source = "127.0.0.1:30030"
+
+# Servers to proxy/load balance players to.
+servers = [
+  { address = "127.0.0.1:30031" },
+  { address = "127.0.0.1:30032" },
+]
