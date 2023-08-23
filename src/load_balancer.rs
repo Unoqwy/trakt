@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::str::FromStr;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
 use tokio::sync::Mutex;
@@ -160,7 +160,6 @@ impl LoadBalancer {
     /// Will return [`None`] if no server is available.
     pub async fn next(&self) -> Option<Arc<BackendServer>> {
         let mut state = self.state.lock().await;
-        dbg! {&state};
         let server_count = state.servers.len();
         if server_count == 0 {
             return None;
@@ -180,7 +179,18 @@ impl LoadBalancer {
                 };
                 state.servers.get(index).cloned()
             }
-            LoadBalanceAlgorithm::LeastConnected => None, // TODO:
+            LoadBalanceAlgorithm::LeastConnected => {
+                let mut min_load = 0;
+                let mut target = None;
+                for server in state.servers.iter() {
+                    let load = server.load.load(Ordering::Acquire);
+                    if load < min_load {
+                        min_load = load;
+                        target = Some(server.clone());
+                    }
+                }
+                target
+            }
         }
     }
 }
