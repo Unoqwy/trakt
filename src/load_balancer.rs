@@ -79,6 +79,12 @@ impl LoadBalancer {
         __self
     }
 
+    /// Reloads configuration.
+    #[inline]
+    pub async fn reload_config(&self) {
+        self.load_config(true).await;
+    }
+
     /// Loads servers from configuration.
     ///
     /// ## Arguments
@@ -136,7 +142,7 @@ impl LoadBalancer {
         }
         let server_count = state.servers.len();
         state.servers.retain(|server| seen.contains(&server.addr));
-        let removed_count = state.servers.len() - server_count;
+        let removed_count = server_count - state.servers.len();
         if reload || removed_count > 0 {
             log::info!(
                 "Reloaded load balancer. There are now {} backend servers ({} added, {} removed)",

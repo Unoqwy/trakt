@@ -13,7 +13,8 @@ use crate::{
 /// A controller that periodically fetches MOTD information
 /// from the backend and exposes the last successful response.
 pub struct MOTDReflector {
-    lock: Semaphore,
+    scheduler_lock: Semaphore,
+    execute_lock: Semaphore,
     stop_notify: Notify,
 
     /// Config provider.
@@ -26,7 +27,8 @@ pub struct MOTDReflector {
 impl MOTDReflector {
     pub fn new(config_provider: Arc<ConfigProvider>) -> Arc<Self> {
         Arc::new(Self {
-            lock: Semaphore::new(1),
+            scheduler_lock: Semaphore::new(1),
+            execute_lock: Semaphore::new(1),
             stop_notify: Notify::new(),
             config_provider,
             last_motd: RwLock::new(None),
@@ -35,7 +37,7 @@ impl MOTDReflector {
 
     /// Checks whether the scheduler is currently running.
     pub fn is_running(&self) -> bool {
-        self.lock.available_permits() == 0
+        self.scheduler_lock.available_permits() == 0
     }
 
     /// Starts the scheduler.
@@ -61,7 +63,7 @@ impl MOTDReflector {
         }
         self.stop_notify.notify_one();
         if wait {
-            let _ = self.lock.acquire().await;
+            let _ = self.scheduler_lock.acquire().await;
         }
     }
 
@@ -70,7 +72,7 @@ impl MOTDReflector {
         self.last_motd.read().await.clone()
     }
 
-    /// Runs the reflector.
+    /// Runs the scheduler.
     async fn run(self: Arc<Self>) -> anyhow::Result<()> {
         let refresh_rate = {
             let config = self.config_provider.read().await;
@@ -78,7 +80,7 @@ impl MOTDReflector {
         };
         let mut interval = time::interval(refresh_rate);
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        let _ = self.lock.acquire().await;
+        let _ = self.scheduler_lock.acquire().await;
         loop {
             tokio::select! {
                 _ = self.stop_notify.notified() => return Ok(()),
@@ -89,7 +91,8 @@ impl MOTDReflector {
     }
 
     /// Fetches the MOTD.
-    async fn execute(&self) {
+    pub async fn execute(&self) {
+        let _ = self.scheduler_lock.acquire().await;
         let (local_addr, sources, proxy_protocol) = {
             let config = self.config_provider.read().await;
             let sources = if let Some(source) = &config.backend.motd_source {

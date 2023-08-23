@@ -1,21 +1,24 @@
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 
+use log::log_enabled;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, RwLockReadGuard};
+use tokio::sync::{RwLock, RwLockReadGuard, Notify, futures::Notified};
 
 /// As config may be updated by reloads,
 /// it is proxied behind this provider.
-/// TODO: reload
 pub struct ConfigProvider {
+    /// Config file path. Used for reloads.
+    config_file: PathBuf,
+
+    /// Last parsed config.
     config: RwLock<RootConfig>,
+    /// Reload notifier.
+    reload_notify: Notify,
 }
 
 /// Configuration file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RootConfig {
-    #[serde(skip)]
-    pub config_file: PathBuf,
-
     /// Address to listen on.
     #[serde(alias = "bind")]
     pub bind_address: String,
@@ -61,22 +64,55 @@ pub struct BackendServerConfig {
 /// ## Arguments
 ///
 /// * `config_file` - Config file path
-pub fn read_config(config_file: PathBuf) -> anyhow::Result<RootConfig> {
-    let contents = fs::read_to_string(&config_file)?;
-    let mut config: RootConfig = toml::from_str(&contents)?;
-    config.config_file = config_file;
-    Ok(config)
+///
+/// ## Returns
+///
+/// A [`ConfigProvider`] that is guaranteed to have the config already loaded and without errors.
+pub fn read_config(config_file: PathBuf) -> anyhow::Result<ConfigProvider> {
+    let contents = std::fs::read_to_string(&config_file)?;
+    let config: RootConfig = toml::from_str(&contents)?;
+    let config_provider = ConfigProvider {
+        config_file,
+        config: RwLock::new(config),
+        reload_notify: Notify::new(),
+    };
+    Ok(config_provider)
 }
 
 impl ConfigProvider {
-    pub fn new(config: RootConfig) -> Self {
-        Self {
-            config: RwLock::new(config),
-        }
-    }
-
     #[inline]
     pub async fn read(&self) -> RwLockReadGuard<'_, RootConfig> {
         self.config.read().await
+    }
+
+    #[inline]
+    pub async fn wait_reload(&self) {
+        self.reload_notify.notified().await;
+    }
+
+    /// Reloads the configuration.
+    pub async fn reload(&self) {
+        let config = match self.read_config().await {
+            Ok(config) => config,
+            Err(err) => {
+                log::error!("Unable to reload config file: {:?}", err);
+                return;
+            }
+        };
+        let mut w = self.config.write().await;
+        *w = config;
+        drop(w);
+        log::info!("Config file reloaded.");
+        if log_enabled!(log::Level::Debug) {
+            let config = self.read().await;
+            log::debug!("Parsed configuration: {:#?}", config);
+        }
+        self.reload_notify.notify_waiters();
+    }
+
+    async fn read_config(&self) -> anyhow::Result<RootConfig> {
+        let contents = tokio::fs::read_to_string(&self.config_file).await?;
+        let config: RootConfig = toml::from_str(&contents)?;
+        Ok(config)
     }
 }

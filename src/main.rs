@@ -1,10 +1,11 @@
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use clap::Parser;
-use config::{ConfigProvider, RootConfig};
+use config::ConfigProvider;
 use log::LevelFilter;
 use proxy::RaknetProxy;
 use simple_logger::SimpleLogger;
+use tokio::io::AsyncBufReadExt;
 
 mod config;
 mod load_balancer;
@@ -36,7 +37,7 @@ fn main() {
     };
     SimpleLogger::new().with_level(log_level).init().unwrap();
 
-    let config = match config::read_config(config_file.clone()) {
+    let config_provider = match config::read_config(config_file.clone()) {
         Ok(config) => config,
         Err(err) => {
             log::error!(
@@ -47,20 +48,56 @@ fn main() {
             return;
         }
     };
-
-    log::debug!("Parsed configuration: {:#?}", config);
-    run(config);
+    run(config_provider);
 }
 
 #[tokio::main]
-async fn run(config: RootConfig) {
-    let bind_address = config.bind_address.clone();
-    let config_provider = Arc::new(ConfigProvider::new(config));
-    let proxy = RaknetProxy::bind(bind_address, config_provider)
+async fn run(config_provider: ConfigProvider) {
+    let bind_address = {
+        let config = config_provider.read().await;
+        log::debug!("Parsed configuration: {:#?}", config);
+        config.bind_address.clone()
+    };
+    let config_provider = Arc::new(config_provider);
+    tokio::spawn({
+        let config_provider = config_provider.clone();
+        async move {
+            run_stdin_handler(config_provider).await;
+        }
+    });
+    let proxy = RaknetProxy::bind(bind_address, config_provider.clone())
         .await
         .unwrap();
+    tokio::spawn({
+        let proxy = proxy.clone();
+        async move {
+            loop {
+                config_provider.wait_reload().await;
+                proxy.reload_config().await;
+            }
+        }
+    });
     if let Err(err) = proxy.clone().run().await {
         log::error!("{}", err);
     }
     proxy.cleanup().await;
+}
+
+async fn run_stdin_handler(config_provider: Arc<ConfigProvider>) {
+    let mut reader = tokio::io::BufReader::new(tokio::io::stdin());
+    loop {
+        let mut buf = String::new();
+        let len = match reader.read_line(&mut buf).await {
+            Ok(line) => line,
+            Err(err) => {
+                log::error!("Error reading user input: {:?}", err);
+                continue;
+            }
+        };
+        let line = &buf[0..len].trim();
+        match line.to_lowercase().as_str() {
+            "reload" => config_provider.reload().await,
+            _ => log::warn!("Unknown command '{}'", line)
+        }
+    }
 }

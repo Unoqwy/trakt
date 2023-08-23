@@ -120,6 +120,12 @@ impl RaknetProxy {
         }))
     }
 
+    /// Reloads configuration.
+    pub async fn reload_config(&self) {
+        self.load_balancer.reload_config().await;
+        self.motd_reflector.execute().await;
+    }
+
     /// Runs the proxy server.
     ///
     /// If stopped graciously it will return `Ok(())`, otherwise it will return an error.
