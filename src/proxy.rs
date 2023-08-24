@@ -286,22 +286,24 @@ impl RaknetProxy {
                     clients.remove(&client.addr);
                     clients.len()
                 };
-                {
+                let was_connected = {
                     let mut w = client.stage.write().await;
+                    let was_connected = matches!(*w, ConnectionStage::Connected);
                     *w = ConnectionStage::Closed;
-                }
+                    was_connected
+                };
                 client.close_lock.add_permits(1);
                 client.server.load.fetch_sub(1, Ordering::Relaxed);
                 match loop_result {
                     Ok(_) => {
-                        log::info!(
+                        log::debug!(
                             "Connection closed: {} | {} total",
                             client.addr,
                             client_count,
                         );
                     }
                     Err(err) => {
-                        log::warn!(
+                        log::debug!(
                             "Connection closed unexpectedly for {}: {} | {} total",
                             client.addr,
                             err,
@@ -309,9 +311,16 @@ impl RaknetProxy {
                         );
                     }
                 }
+                if was_connected {
+                    log::info!(
+                        "Player {} has disconnected from {}",
+                        client.addr,
+                        client.server.addr
+                    )
+                }
             }
         });
-        log::info!(
+        log::debug!(
             "Client initialized: {} <-> {} ({}) | {} total",
             client.addr,
             client.server.addr,
@@ -411,7 +420,10 @@ impl RaknetClient {
         let message_type = RaknetMessage::from_u8(data[0]);
         if matches!(message_type, Some(RaknetMessage::OpenConnectionReply2)) {
             let mut w = self.stage.write().await;
-            *w = ConnectionStage::Connected;
+            if !matches!(*w, ConnectionStage::Connected) {
+                *w = ConnectionStage::Connected;
+                log::info!("Player {} has connected to {}", self.addr, self.server.addr)
+            }
         }
         if let Some(message_type) = message_type {
             log::trace!(
@@ -447,12 +459,6 @@ impl RaknetClient {
                 self.debug_prefix(Direction::ServerToPlayer),
                 err
             );
-        } else {
-            log::trace!(
-                "{} Forwarded {} bytes",
-                self.debug_prefix(Direction::ServerToPlayer),
-                data.len()
-            )
         }
     }
 
@@ -545,12 +551,6 @@ impl RaknetClient {
                 self.debug_prefix(Direction::PlayerToServer),
                 err
             );
-        } else {
-            log::trace!(
-                "{} Forwarded {} bytes",
-                self.debug_prefix(Direction::PlayerToServer),
-                data.len()
-            )
         }
     }
 
