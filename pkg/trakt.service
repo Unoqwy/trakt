@@ -1,0 +1,11 @@
+[Unit]
+Description=Trakt Load Balancer
+After=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+ExecStart=/usr/local/bin/trakt --ignore-stdin --config /etc/trakt.toml
+
+[Install]
+WantedBy=multi-user.target
