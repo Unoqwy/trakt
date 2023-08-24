@@ -30,16 +30,15 @@ struct Args {
     /// Disables colors from output.
     #[arg(long)]
     no_color: bool,
+    /// Raises the maximum number of open files allowed to avoid issues.
+    ///
+    /// Not enabled by default as it may not work in all environments.
+    #[arg(long)]
+    raise_ulimit: bool,
 }
 
 fn main() {
     let args = Args::parse();
-
-    let config_file = args
-        .config
-        .as_ref()
-        .map(PathBuf::clone)
-        .unwrap_or_else(|| PathBuf::from_str("config.toml").unwrap());
     let log_level = match args.verbose {
         0 => LevelFilter::Info,
         1 => LevelFilter::Debug,
@@ -50,6 +49,17 @@ fn main() {
         .with_colors(!args.no_color)
         .init()
         .unwrap();
+
+    if args.raise_ulimit {
+        let ulimit = fdlimit::raise_fd_limit().unwrap_or(0);
+        log::info!("Raised ulimit to {}", ulimit);
+    }
+
+    let config_file = args
+        .config
+        .as_ref()
+        .map(PathBuf::clone)
+        .unwrap_or_else(|| PathBuf::from_str("config.toml").unwrap());
 
     let config_provider = match config::read_config(config_file.clone()) {
         Ok(config) => config,

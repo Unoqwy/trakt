@@ -34,7 +34,8 @@ Options:
   -v, --verbose...     Verbose level
       --ignore-stdin   Disable reading from standard input for commands
       --no-color       Disables colors from output
-  -h, --help           Print help
+      --raise-ulimit   Raises the maximum number of open files allowed to avoid issues
+  -h, --help           Print help (see more with '--help')
   -V, --version        Print version
 ```
 
