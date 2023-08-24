@@ -27,6 +27,9 @@ struct Args {
     /// Disable reading from standard input for commands.
     #[arg(long)]
     ignore_stdin: bool,
+    /// Disables colors from output.
+    #[arg(long)]
+    no_color: bool,
 }
 
 fn main() {
@@ -42,7 +45,11 @@ fn main() {
         1 => LevelFilter::Debug,
         _ => LevelFilter::Trace,
     };
-    SimpleLogger::new().with_level(log_level).init().unwrap();
+    SimpleLogger::new()
+        .with_level(log_level)
+        .with_colors(!args.no_color)
+        .init()
+        .unwrap();
 
     let config_provider = match config::read_config(config_file.clone()) {
         Ok(config) => config,

@@ -33,6 +33,7 @@ Options:
   -c, --config <FILE>  Configuration file
   -v, --verbose...     Verbose level
       --ignore-stdin   Disable reading from standard input for commands
+      --no-color       Disables colors from output
   -h, --help           Print help
   -V, --version        Print version
 ```
