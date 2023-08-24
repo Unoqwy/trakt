@@ -1,5 +1,6 @@
 use rand::Rng;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use crate::config::ConfigProvider;
@@ -305,12 +306,11 @@ impl RaknetProxy {
                         );
                     }
                     Err(err) => {
-                        log::error!("[{}] Connection closed unexpectedly: {}", client.addr, err);
+                        log::warn!("[{}] Connection closed unexpectedly: {}", client.addr, err);
                     }
                 }
             }
         });
-        // TODO: Timeout cleanup
         log::debug!(
             "Client initialized: {} <-> {} ({}) | {} total",
             client.addr,
@@ -378,12 +378,14 @@ impl RaknetClient {
     /// Runs the client event loop.
     async fn run_event_loop(&self) -> anyhow::Result<()> {
         let mut buf = [0u8; 1492];
+        // 10 seconds without data from the server = force close
+        let timeout = Duration::from_secs(10);
         loop {
             tokio::select! {
                 _ = self.close_notify.notified() => return Ok(()),
 
-                result = self.udp_sock.recv(&mut buf) => {
-                    let len = result?;
+                result = tokio::time::timeout(timeout, self.udp_sock.recv(&mut buf)) => {
+                    let len = result??;
                     let data = Bytes::copy_from_slice(&buf[..len]);
                     if let Err(err) = self.handle_incoming_server(data).await {
                         log::debug!(
