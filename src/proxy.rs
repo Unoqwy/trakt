@@ -268,7 +268,7 @@ impl RaknetProxy {
             Some(server) => server,
             None => return Err(anyhow::anyhow!("No server available to proxy this player")),
         };
-        log::trace!("[{}] Picked server {}", addr, server.addr);
+        log::debug!("[{}] Picked server {}", addr, server.addr);
         let client = Arc::new(RaknetClient {
             addr,
             server,
@@ -299,7 +299,7 @@ impl RaknetProxy {
                 client.server.load.fetch_sub(1, Ordering::Relaxed);
                 match loop_result {
                     Ok(_) => {
-                        log::debug!(
+                        log::info!(
                             "Connection closed: {} | {} total",
                             client.addr,
                             client_count,
@@ -311,7 +311,7 @@ impl RaknetProxy {
                 }
             }
         });
-        log::debug!(
+        log::info!(
             "Client initialized: {} <-> {} ({}) | {} total",
             client.addr,
             client.server.addr,
