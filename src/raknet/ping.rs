@@ -1,8 +1,14 @@
-use std::time::{self, Duration, SystemTime};
+use std::{
+    sync::Arc,
+    time::{self, Duration, SystemTime},
+};
 
 use anyhow::Context;
 use bytes::Bytes;
-use tokio::net::{ToSocketAddrs, UdpSocket};
+use tokio::{
+    net::{ToSocketAddrs, UdpSocket},
+    time::Instant,
+};
 
 use crate::raknet::{
     datatypes::ReadBuf,
@@ -162,17 +168,6 @@ pub async fn ping<A1: ToSocketAddrs, A2: ToSocketAddrs>(
     let udp_sock = UdpSocket::bind(local_addr).await?;
     udp_sock.connect(addr).await?;
 
-    if proxy_protocol {
-        let local_addr = udp_sock.local_addr()?;
-        let header = haproxy::Builder::with_addresses(
-            haproxy::Version::Two | haproxy::Command::Proxy,
-            haproxy::Protocol::Datagram,
-            (local_addr, local_addr),
-        )
-        .build()?;
-        udp_sock.send(&header).await?;
-    }
-
     let now = SystemTime::now()
         .duration_since(time::UNIX_EPOCH)?
         .as_secs()
@@ -181,11 +176,37 @@ pub async fn ping<A1: ToSocketAddrs, A2: ToSocketAddrs>(
         client_uuid: now,
         forward_timestamp: now,
     };
-    udp_sock.send(&ping.to_bytes()?).await?;
+
+    let ping_packet = if proxy_protocol {
+        let local_addr = udp_sock.local_addr()?;
+        let header = haproxy::Builder::with_addresses(
+            haproxy::Version::Two | haproxy::Command::Proxy,
+            haproxy::Protocol::Datagram,
+            (local_addr, local_addr),
+        )
+        .build()?;
+
+        let mut buf = header;
+        buf.extend(ping.to_bytes()?);
+        buf
+    } else {
+        ping.to_bytes()?
+    };
+
+    let udp_sock = Arc::new(udp_sock);
+    let udp_sock_2 = udp_sock.clone();
+    let deadline = Instant::now() + timeout;
 
     let mut buf = [0u8; 1492];
-    let len = tokio::time::timeout(timeout, udp_sock.recv(&mut buf)).await??;
-    let mut buf = ReadBuf::new(Bytes::copy_from_slice(&buf[..len]));
+    let len = tokio::select! {
+        res = ping_resender(udp_sock_2, &ping_packet) => {
+            res?;
+            0
+        }
+        res = tokio::time::timeout_at(deadline, udp_sock.recv(&mut buf)) => res??,
+    };
+    let buf = &buf[..len];
+    let mut buf = ReadBuf::new(Bytes::copy_from_slice(buf));
     let message_type = RaknetMessage::from_u8(buf.read_u8()?);
     if !matches!(message_type, Some(RaknetMessage::UnconnectedPong)) {
         return Err(anyhow::anyhow!("Received a reply other than pong"));
@@ -193,4 +214,14 @@ pub async fn ping<A1: ToSocketAddrs, A2: ToSocketAddrs>(
     let pong = MessageUnconnectedPong::deserialize(&mut buf)?;
     let motd = Motd::decode_payload(&pong.motd).context("empty payload")?;
     Ok(motd)
+}
+
+async fn ping_resender(udp_sock: Arc<UdpSocket>, ping_packet: &[u8]) -> anyhow::Result<()> {
+    let mut attempts = 0;
+    loop {
+        attempts += 1;
+        log::trace!("Ping attempt #{} to {}", attempts, udp_sock.peer_addr()?);
+        udp_sock.send(ping_packet).await?;
+        tokio::time::sleep(Duration::from_millis(750)).await;
+    }
 }
