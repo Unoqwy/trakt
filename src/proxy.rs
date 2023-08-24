@@ -7,6 +7,7 @@ use crate::config::ConfigProvider;
 use crate::health::HealthController;
 use crate::load_balancer::{BackendServer, LoadBalancer};
 use crate::motd::MOTDReflector;
+use crate::raknet;
 use crate::raknet::{
     datatypes::ReadBuf,
     frame::Frame,
@@ -91,6 +92,7 @@ enum SpyDatagramResult {
 }
 
 /// Data flow direction.
+#[derive(Debug, Clone, Copy)]
 enum Direction {
     /// Player <-> Server
     PlayerToServer,
@@ -299,7 +301,12 @@ impl RaknetProxy {
                         );
                     }
                     Err(err) => {
-                        log::warn!("[{}] Connection closed unexpectedly: {}", client.addr, err);
+                        log::warn!(
+                            "Connection closed unexpectedly for {}: {} | {} total",
+                            client.addr,
+                            err,
+                            client_count
+                        );
                     }
                 }
             }
@@ -414,6 +421,16 @@ impl RaknetClient {
             );
         }
         self.forward_to_player(&data).await;
+        if matches!(
+            self.spy_datagram(Direction::ServerToPlayer, data),
+            Ok(SpyDatagramResult::Disconnect)
+        ) {
+            log::debug!(
+                "{} Found disconnect notification in datagram",
+                self.debug_prefix(Direction::ServerToPlayer),
+            );
+            self.close_notify.notify_one();
+        }
         Ok(())
     }
 
@@ -460,7 +477,10 @@ impl RaknetClient {
             return Ok(());
         }
         self.forward_to_server(&data).await;
-        if matches!(self.spy_datagram(data), Ok(SpyDatagramResult::Disconnect)) {
+        if matches!(
+            self.spy_datagram(Direction::PlayerToServer, data),
+            Ok(SpyDatagramResult::Disconnect)
+        ) {
             log::debug!(
                 "{} Found disconnect notification in datagram",
                 self.debug_prefix(Direction::PlayerToServer),
@@ -479,8 +499,9 @@ impl RaknetClient {
     ///
     /// ## Arguments
     ///
+    /// * `direction` - Data flow direction
     /// * `data` - Datagram received data
-    fn spy_datagram(&self, data: Bytes) -> anyhow::Result<SpyDatagramResult> {
+    fn spy_datagram(&self, direction: Direction, data: Bytes) -> anyhow::Result<SpyDatagramResult> {
         let mut buf = ReadBuf::new(data);
         let _ = buf.read_u8()?; // header flags
         let _ = buf.read_u24()?; // seq
@@ -489,7 +510,21 @@ impl RaknetClient {
             if frame.fragment.is_some() || frame.body.is_empty() {
                 continue;
             }
+            if frame.body[0] == raknet::GAME_PACKET_HEADER {
+                // we could spy into game packets to look for a Disconnect packet but it may not really be worth it
+                // what happens currently is that when the client receives a Disconnect packet it closes the connection
+                // and never sends an ACK, so the server tries to send the packet in a loop for a few seconds
+                // it's pretty negligible, I don't think it matters much
+                continue;
+            }
             let message_type = RaknetMessage::from_u8(frame.body[0]);
+            log::trace!(
+                "{} Frame with message type {:?} ({:02x}) and body size {}",
+                self.debug_prefix(direction),
+                message_type,
+                frame.body[0],
+                frame.body.len(),
+            );
             if matches!(message_type, Some(RaknetMessage::DisconnectNotification)) {
                 return Ok(SpyDatagramResult::Disconnect);
             }
