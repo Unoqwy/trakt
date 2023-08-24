@@ -24,6 +24,9 @@ struct Args {
     /// Verbose level.
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
+    /// Disable reading from standard input for commands.
+    #[arg(long)]
+    ignore_stdin: bool,
 }
 
 fn main() {
@@ -31,6 +34,8 @@ fn main() {
 
     let config_file = args
         .config
+        .as_ref()
+        .map(PathBuf::clone)
         .unwrap_or_else(|| PathBuf::from_str("config.toml").unwrap());
     let log_level = match args.verbose {
         0 => LevelFilter::Info,
@@ -50,23 +55,26 @@ fn main() {
             return;
         }
     };
-    run(config_provider);
+    run(config_provider, args);
 }
 
 #[tokio::main]
-async fn run(config_provider: ConfigProvider) {
+async fn run(config_provider: ConfigProvider, args: Args) {
     let bind_address = {
         let config = config_provider.read().await;
         log::debug!("Parsed configuration: {:#?}", config);
         config.bind_address.clone()
     };
     let config_provider = Arc::new(config_provider);
-    tokio::spawn({
-        let config_provider = config_provider.clone();
-        async move {
-            run_stdin_handler(config_provider).await;
-        }
-    });
+    if !args.ignore_stdin {
+        tokio::spawn({
+            let config_provider = config_provider.clone();
+            async move {
+                log::info!("Console commands enabled");
+                run_stdin_handler(config_provider).await;
+            }
+        });
+    }
     let proxy = RaknetProxy::bind(bind_address, config_provider.clone())
         .await
         .unwrap();
