@@ -83,18 +83,19 @@ async fn run(config_provider: ConfigProvider, args: Args) {
         config.bind_address.clone()
     };
     let config_provider = Arc::new(config_provider);
-    if !args.ignore_stdin {
-        tokio::spawn({
-            let config_provider = config_provider.clone();
-            async move {
-                log::info!("Console commands enabled");
-                run_stdin_handler(config_provider).await;
-            }
-        });
-    }
     let proxy = RaknetProxy::bind(bind_address, config_provider.clone())
         .await
         .unwrap();
+    if !args.ignore_stdin {
+        tokio::spawn({
+            let proxy = proxy.clone();
+            let config_provider = config_provider.clone();
+            async move {
+                log::info!("Console commands enabled");
+                run_stdin_handler(proxy, config_provider).await;
+            }
+        });
+    }
     tokio::spawn({
         let proxy = proxy.clone();
         async move {
@@ -110,7 +111,7 @@ async fn run(config_provider: ConfigProvider, args: Args) {
     proxy.cleanup().await;
 }
 
-async fn run_stdin_handler(config_provider: Arc<ConfigProvider>) {
+async fn run_stdin_handler(proxy: Arc<RaknetProxy>, config_provider: Arc<ConfigProvider>) {
     let mut reader = tokio::io::BufReader::new(tokio::io::stdin());
     loop {
         let mut buf = String::new();
@@ -124,6 +125,15 @@ async fn run_stdin_handler(config_provider: Arc<ConfigProvider>) {
         let line = &buf[0..len].trim();
         match line.to_lowercase().as_str() {
             "reload" => config_provider.reload().await,
+            "list" | "load" => {
+                let overview = proxy.load_overview().await;
+                log::info!(
+                    "There are {} online players ({} active clients). Breakdown: {:?}",
+                    overview.connected_count,
+                    overview.client_count,
+                    overview.per_server
+                )
+            }
             _ => log::warn!("Unknown command '{}'", line),
         }
     }

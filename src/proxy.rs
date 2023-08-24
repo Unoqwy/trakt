@@ -100,6 +100,17 @@ enum Direction {
     ServerToPlayer,
 }
 
+/// Overview of the load of a [`RaknetProy`].
+#[derive(Debug, Clone)]
+pub struct LoadOverview {
+    /// Number of active clients.
+    pub client_count: usize,
+    /// Out of the active clients, how many are actually connected.
+    pub connected_count: usize,
+    /// Breakdown of the load per server.
+    pub per_server: HashMap<SocketAddr, usize>,
+}
+
 impl RaknetProxy {
     /// Attempts to bind a proxy server to a UDP socket.
     ///
@@ -139,6 +150,29 @@ impl RaknetProxy {
     pub async fn reload_config(&self) {
         self.load_balancer.reload_config().await;
         self.scheduler.restart().await;
+    }
+
+    /// Obtains a load overview.
+    pub async fn load_overview(&self) -> LoadOverview {
+        let clients = self.clients.read().await;
+        let mut per_server = HashMap::new();
+        let mut client_count = 0;
+        let mut connected_count = 0;
+        for (_, client) in clients.iter() {
+            per_server
+                .entry(client.server.addr)
+                .or_insert_with(|| client.server.load.load(Ordering::Acquire));
+            client_count += 1;
+            let stage = client.stage.read().await;
+            if matches!(*stage, ConnectionStage::Connected) {
+                connected_count += 1;
+            }
+        }
+        LoadOverview {
+            client_count,
+            connected_count,
+            per_server,
+        }
     }
 
     /// Runs the proxy server.
