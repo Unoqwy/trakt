@@ -61,6 +61,16 @@ pub struct BackendServerConfig {
     pub address: String,
 }
 
+impl ConfigProvider {
+    pub fn new(config_file: PathBuf, config: RootConfig) -> Self {
+        Self {
+            config_file,
+            config: RwLock::new(config),
+            reload_notify: Notify::new(),
+        }
+    }
+}
+
 /// Attempts to read the configuration file.
 ///
 /// ## Arguments

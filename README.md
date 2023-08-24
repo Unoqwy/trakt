@@ -11,6 +11,7 @@ Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 - Proxy Protocol support to forward player IPs
 - Health checks (ping) to not send players to servers that are down
 - Dynamic configuration reload
+- Ability to restart and recover active connections (provided it restarts within a few seconds)
 
 ## Installation
 

@@ -1,10 +1,11 @@
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{path::PathBuf, process::exit, str::FromStr, sync::Arc, time::Duration};
 
 use clap::Parser;
 use config::ConfigProvider;
 use log::LevelFilter;
 use proxy::RaknetProxy;
 use simple_logger::SimpleLogger;
+use snapshot::RaknetProxySnapshot;
 use tokio::io::AsyncBufReadExt;
 
 mod config;
@@ -14,12 +15,13 @@ mod motd;
 mod proxy;
 mod raknet;
 mod scheduler;
+mod snapshot;
 
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
     /// Configuration file.
-    #[arg(short, long, value_name = "FILE")]
+    #[arg(short, long, value_name = "FILE", default_value = "config.toml")]
     config: Option<PathBuf>,
     /// Verbose level.
     #[arg(short, long, action = clap::ArgAction::Count)]
@@ -35,6 +37,9 @@ struct Args {
     /// Not enabled by default as it may not work in all environments.
     #[arg(long)]
     raise_ulimit: bool,
+    /// File to read & write the recovery snapshot to.
+    #[arg(long, value_name = "FILE", default_value = ".trakt_recover")]
+    recovery_snapshot_file: Option<PathBuf>,
 }
 
 fn main() {
@@ -55,37 +60,88 @@ fn main() {
         log::info!("Raised ulimit to {}", ulimit);
     }
 
+    let recovery_snapshot_file = args
+        .recovery_snapshot_file
+        .as_ref()
+        .map(PathBuf::clone)
+        .unwrap_or_else(|| PathBuf::from_str(".trakt_recover").unwrap());
+    let snapshot = match snapshot::read_snapshot_file(&recovery_snapshot_file) {
+        Ok(Some(snapshot))
+            if snapshot
+                .taken_at
+                .elapsed()
+                .map(|elapsed| elapsed >= Duration::from_secs(15))
+                .unwrap_or(true) =>
+        {
+            log::warn!(
+                "Recovery snapshot file exsits but dates back from more than 15 seconds. Ignoring."
+            );
+            None
+        }
+        Ok(snapshot) => {
+            if snapshot.is_some() {
+                log::info!("Recovering active connections from recovery snapshot.");
+            }
+            snapshot
+        }
+        Err(err) => {
+            log::error!(
+                "Could not read snapshot recovery file ({}): {}",
+                recovery_snapshot_file.to_string_lossy(),
+                err
+            );
+            None
+        }
+    };
+
     let config_file = args
         .config
         .as_ref()
         .map(PathBuf::clone)
         .unwrap_or_else(|| PathBuf::from_str("config.toml").unwrap());
-
-    let config_provider = match config::read_config(config_file.clone()) {
-        Ok(config) => config,
-        Err(err) => {
-            log::error!(
-                "Could not read configuration file ({}): {}",
-                config_file.to_string_lossy(),
-                err
-            );
-            return;
+    let config_provider = if let Some(snapshot) = &snapshot {
+        ConfigProvider::new(config_file, snapshot.config.clone())
+    } else {
+        match config::read_config(config_file.clone()) {
+            Ok(config) => config,
+            Err(err) => {
+                log::error!(
+                    "Could not read configuration file ({}): {}",
+                    config_file.to_string_lossy(),
+                    err
+                );
+                return;
+            }
         }
     };
-    run(config_provider, args);
+    run(config_provider, args, recovery_snapshot_file, snapshot);
 }
 
 #[tokio::main]
-async fn run(config_provider: ConfigProvider, args: Args) {
-    let bind_address = {
+async fn run(
+    config_provider: ConfigProvider,
+    args: Args,
+    recovery_snapshot_file: PathBuf,
+    snapshot: Option<RaknetProxySnapshot>,
+) {
+    let bind_address = if let Some(snapshot) = &snapshot {
+        snapshot.player_proxy_bind.clone()
+    } else {
         let config = config_provider.read().await;
         log::debug!("Parsed configuration: {:#?}", config);
         config.bind_address.clone()
     };
     let config_provider = Arc::new(config_provider);
-    let proxy = RaknetProxy::bind(bind_address, config_provider.clone())
-        .await
-        .unwrap();
+    let proxy = RaknetProxy::bind(
+        bind_address,
+        config_provider.clone(),
+        recovery_snapshot_file,
+    )
+    .await
+    .unwrap();
+    if let Some(snapshot) = snapshot {
+        proxy.recover_from_snapshot(snapshot).await;
+    }
     if !args.ignore_stdin {
         tokio::spawn({
             let proxy = proxy.clone();
@@ -99,9 +155,23 @@ async fn run(config_provider: ConfigProvider, args: Args) {
     tokio::spawn({
         let proxy = proxy.clone();
         async move {
+            let mut shutdown_requests = 0;
             loop {
-                config_provider.wait_reload().await;
-                proxy.reload_config().await;
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {
+                        shutdown_requests += 1;
+                        if shutdown_requests >= 3 {
+                            exit(1);
+                        }
+                        log::info!("Shutdown requested...");
+                        if proxy.take_and_write_snapshot().await {
+                            exit(0);
+                        }
+                    }
+                    _ = config_provider.wait_reload() => {
+                        proxy.reload_config().await;
+                    }
+                }
             }
         }
     });
@@ -133,6 +203,9 @@ async fn run_stdin_handler(proxy: Arc<RaknetProxy>, config_provider: Arc<ConfigP
                     overview.client_count,
                     overview.per_server
                 )
+            }
+            "recover-able-shutdown" | "ras" => {
+                proxy.take_and_write_snapshot().await;
             }
             _ => log::warn!("Unknown command '{}'", line),
         }

@@ -49,6 +49,16 @@ pub struct BackendServer {
     pub load: AtomicUsize,
 }
 
+impl BackendServer {
+    pub fn new(addr: SocketAddr) -> Self {
+        Self {
+            addr,
+            health: RwLock::new(ServerHealth::default()),
+            load: AtomicUsize::new(0),
+        }
+    }
+}
+
 impl LoadBalancer {
     /// Initializes a load balancer from config.
     ///
@@ -135,11 +145,7 @@ impl LoadBalancer {
             if active.is_some() {
                 continue;
             }
-            let server = Arc::new(BackendServer {
-                addr,
-                health: RwLock::new(ServerHealth::default()),
-                load: AtomicUsize::new(0),
-            });
+            let server = Arc::new(BackendServer::new(addr));
             state.servers.push(server.clone());
             new_count += 1;
             self.health_controller.register_server(server).await;

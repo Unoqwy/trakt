@@ -10,8 +10,9 @@ clap = { version = "4.3", features = ["derive"] }
 log = "0.4.20"
 simple_logger = "4.2"
 
-serde = { version = "1.0.185", features = ["derive"] }
-toml = "0.7.6"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.7"
 
 fdlimit = "0.2.1"
 anyhow = "1.0"

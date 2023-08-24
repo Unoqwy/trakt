@@ -1,19 +1,22 @@
 use rand::Rng;
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use crate::config::ConfigProvider;
 use crate::health::HealthController;
 use crate::load_balancer::{BackendServer, LoadBalancer};
 use crate::motd::MOTDReflector;
-use crate::raknet;
 use crate::raknet::{
     datatypes::ReadBuf,
     frame::Frame,
     message::{Message, MessageUnconnectedPing, MessageUnconnectedPong, RaknetMessage},
 };
 use crate::scheduler::Scheduler;
+use crate::snapshot::{RaknetClientSnapshot, RaknetProxySnapshot};
+use crate::{raknet, snapshot};
 use bytes::{Buf, Bytes};
 use tokio::{
     net::{ToSocketAddrs, UdpSocket},
@@ -45,8 +48,13 @@ pub struct RaknetProxy {
     motd_reflector: Arc<MOTDReflector>,
     /// Load balancer.
     load_balancer: LoadBalancer,
+    /// Health controller.
+    health_controller: Arc<HealthController>,
     /// Scheduler.
     scheduler: Scheduler,
+
+    /// Recovery snapshot file.
+    recovery_snapshot_file: PathBuf,
 }
 
 /// A client to the proxy.
@@ -118,9 +126,11 @@ impl RaknetProxy {
     ///
     /// * `in_addr` - Address to bind to for Player <-> Proxy traffic
     /// * `config_provider` - Config provider
+    /// * `recovery_snapshot_file` - Recovery snapshot file
     pub async fn bind<A: ToSocketAddrs>(
         in_addr: A,
         config_provider: Arc<ConfigProvider>,
+        recovery_snapshot_file: PathBuf,
     ) -> std::io::Result<Arc<Self>> {
         let in_udp_sock = UdpSocket::bind(in_addr).await?;
         let in_bound_port = in_udp_sock.local_addr()?.port();
@@ -132,7 +142,7 @@ impl RaknetProxy {
         let scheduler = Scheduler::new(
             config_provider.clone(),
             motd_reflector.clone(),
-            health_controller,
+            health_controller.clone(),
         );
         Ok(Arc::new(Self {
             in_udp_sock: Arc::new(in_udp_sock),
@@ -142,8 +152,72 @@ impl RaknetProxy {
             clients: Default::default(),
             motd_reflector,
             load_balancer,
+            health_controller,
             scheduler,
+            recovery_snapshot_file,
         }))
+    }
+
+    /// Recovers active connections from a recovery snapshot.
+    ///
+    /// ## Arguments
+    ///
+    /// * `snapshot` - Recovery snapshot
+    pub async fn recover_from_snapshot(&self, snapshot: RaknetProxySnapshot) {
+        let mut servers = HashMap::new();
+        for client in snapshot.clients {
+            let addr = match SocketAddr::from_str(&client.addr) {
+                Ok(addr) => addr,
+                Err(err) => {
+                    log::warn!(
+                        "Could not recover client {} from snapshot: Invalid address: {:?}",
+                        client.addr,
+                        err
+                    );
+                    continue;
+                }
+            };
+            let server_addr = match SocketAddr::from_str(&client.server_addr) {
+                Ok(addr) => addr,
+                Err(err) => {
+                    log::warn!(
+                        "Could not recover client {} from snapshot: Invalid server address: {:?}",
+                        client.addr,
+                        err
+                    );
+                    continue;
+                }
+            };
+            let server = servers
+                .entry(server_addr)
+                .or_insert_with(|| Arc::new(BackendServer::new(server_addr)))
+                .clone();
+            let server_addr = server.addr;
+            if let Err(err) = self
+                .new_client(
+                    addr,
+                    ConnectionStage::Connected,
+                    Some(client.proxy_server_bind),
+                    Some(server),
+                )
+                .await
+            {
+                log::warn!(
+                    "Could not recover client {} from snapshot: {:?}",
+                    client.addr,
+                    err
+                );
+            } else {
+                log::info!(
+                    "Recover player {}. Connected to {}",
+                    client.addr,
+                    server_addr
+                )
+            }
+        }
+        for (_, server) in servers {
+            self.health_controller.register_server(server).await;
+        }
     }
 
     /// Reloads configuration.
@@ -211,6 +285,53 @@ impl RaknetProxy {
         self.scheduler.stop(true).await;
     }
 
+    /// Takes a snapshot of the current proxy state.
+    pub async fn take_snapshot(&self) -> anyhow::Result<RaknetProxySnapshot> {
+        let config = {
+            let config = self.config_provider.read().await;
+            config.clone()
+        };
+        let player_proxy_bind = self.in_udp_sock.local_addr()?.to_string();
+        let active_clients = self.clients.read().await;
+        let mut clients = Vec::new();
+        for (_, client) in active_clients.iter() {
+            let stage = client.stage.read().await;
+            if !matches!(*stage, ConnectionStage::Connected) {
+                continue;
+            }
+            clients.push(RaknetClientSnapshot {
+                addr: client.addr.to_string(),
+                server_addr: client.server.addr.to_string(),
+                proxy_server_bind: client.udp_sock.local_addr()?.to_string(),
+            });
+        }
+        let taken_at = SystemTime::now();
+        Ok(RaknetProxySnapshot {
+            taken_at,
+            config,
+            player_proxy_bind,
+            clients,
+        })
+    }
+
+    /// Takes a snapshot of the current proxy state and try to write it to disk.
+    pub async fn take_and_write_snapshot(&self) -> bool {
+        let snapshot = match self.take_snapshot().await {
+            Ok(snapshot) => snapshot,
+            Err(err) => {
+                log::error!("Could not take proxy state snapshot: {:?}", err);
+                return false;
+            }
+        };
+        match snapshot::write_snapshot_file(&self.recovery_snapshot_file, &snapshot) {
+            Ok(_) => true,
+            Err(err) => {
+                log::error!("Could not write proxy state snapshot to disk: {:?}", err);
+                false
+            }
+        }
+    }
+
     /// Handles incoming data from the UDP socket from the player to the server.
     ///
     /// ## Arguments
@@ -255,7 +376,9 @@ impl RaknetProxy {
                         client.close_notify.notify_one();
                         let _ = client.close_lock.acquire().await;
                     }
-                    let new_client = self.new_client(addr, ConnectionStage::Handshake).await?;
+                    let new_client = self
+                        .new_client(addr, ConnectionStage::Handshake, None, None)
+                        .await?;
                     client = Some(new_client);
                 }
                 client.unwrap().forward_to_server(&data).await;
@@ -272,16 +395,22 @@ impl RaknetProxy {
     /// ## Arguments
     ///
     /// * `addr` - Remote player client address
-    /// * `stage` - Connection stage. Should always be [`ConnectionStage::Handshake`].
+    /// * `stage` - Connection stage. Should be [`ConnectionStage::Handshake`] for new ones
+    /// * `proxy_bind` - Specific Proxy <-> Server bind socket address. If [`None`], the
+    ///                  default one will be used
+    /// * `server` - Specific backend server. If [`None`], one will be picked
+    ///              from the load balancer.
     async fn new_client(
         &self,
         addr: SocketAddr,
         stage: ConnectionStage,
+        proxy_bind: Option<String>,
+        server: Option<Arc<BackendServer>>,
     ) -> anyhow::Result<Arc<RaknetClient>> {
         let (proxy_bind, proxy_protocol) = {
             let config = self.config_provider.read().await;
             (
-                config.proxy_bind.clone(),
+                proxy_bind.unwrap_or(config.proxy_bind.clone()),
                 config.proxy_protocol.unwrap_or(true),
             )
         };
@@ -293,11 +422,16 @@ impl RaknetProxy {
                 addr
             ));
         }
-        let server = match self.load_balancer.next().await {
+        let server = match server {
             Some(server) => server,
-            None => return Err(anyhow::anyhow!("No server available to proxy this player")),
+            None => match self.load_balancer.next().await {
+                Some(server) => {
+                    log::debug!("[{}] Picked server {}", addr, server.addr);
+                    server
+                }
+                None => return Err(anyhow::anyhow!("No server available to proxy this player")),
+            },
         };
-        log::debug!("[{}] Picked server {}", addr, server.addr);
         let client = Arc::new(RaknetClient {
             addr,
             server,
