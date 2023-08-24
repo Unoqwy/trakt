@@ -44,7 +44,7 @@ impl Reliability {
         }
     }
 
-    pub fn to_u8(&self) -> u8 {
+    pub fn to_u8(self) -> u8 {
         match self {
             Self::Unreliable => 0x00,
             Self::UnreliableSequenced => 0x01,
@@ -111,7 +111,7 @@ impl Message for Frame {
         let fragmented = (header & FLAG_FRAGMENTED) != 0;
         let reliability_id = (header & 224) >> 5;
         let reliability: Reliability = Reliability::from_u8(reliability_id)
-            .ok_or_else(|| MessageError::UnknownRealibility(reliability_id))?;
+            .ok_or(MessageError::UnknownRealibility(reliability_id))?;
         let body_len = (buf.read_u16()? as usize) >> 3;
         if body_len == 0 {
             return Err(MessageError::ZeroSize);

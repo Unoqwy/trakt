@@ -4,7 +4,7 @@ use tokio::sync::{RwLock, Semaphore};
 
 use crate::{
     config::ConfigProvider,
-    raknet::ping::{self, MOTD},
+    raknet::ping::{self, Motd},
 };
 
 /// A controller that periodically fetches MOTD information
@@ -16,7 +16,7 @@ pub struct MOTDReflector {
     config_provider: Arc<ConfigProvider>,
 
     /// Last successful MOTD response, if any.
-    last_motd: RwLock<Option<MOTD>>,
+    last_motd: RwLock<Option<Motd>>,
 }
 
 impl MOTDReflector {
@@ -29,7 +29,7 @@ impl MOTDReflector {
     }
 
     /// Returns a clone of the last sucessful MOTD information received.
-    pub async fn last_motd(&self) -> Option<MOTD> {
+    pub async fn last_motd(&self) -> Option<Motd> {
         self.last_motd.read().await.clone()
     }
 

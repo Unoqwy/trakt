@@ -97,15 +97,16 @@ impl LoadBalancer {
         let new_method = config
             .load_balance_method
             .unwrap_or(config::LoadBalanceMethod::RoundRobin);
-        let algo_reset = match (&state.algo, &new_method) {
-            (LoadBalanceAlgorithm::RoundRobin { .. }, config::LoadBalanceMethod::RoundRobin) => {
-                false
-            }
-            (LoadBalanceAlgorithm::LeastConnected, config::LoadBalanceMethod::LeastConnected) => {
-                false
-            }
-            _ => true,
-        };
+        let algo_reset = !matches!(
+            (&state.algo, &new_method),
+            (
+                LoadBalanceAlgorithm::RoundRobin { .. },
+                config::LoadBalanceMethod::RoundRobin
+            ) | (
+                LoadBalanceAlgorithm::LeastConnected,
+                config::LoadBalanceMethod::LeastConnected
+            )
+        );
         if algo_reset {
             state.algo = LoadBalanceAlgorithm::init(new_method);
         }

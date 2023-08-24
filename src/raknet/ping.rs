@@ -14,7 +14,7 @@ use ppp::v2 as haproxy;
 
 /// Structured bedrock MOTD representation.
 #[derive(Clone, Debug)]
-pub struct MOTD {
+pub struct Motd {
     /// UUID of the server
     pub server_uuid: i64,
     /// Edition of the game run by the server
@@ -55,7 +55,7 @@ pub enum GameMode {
     Custom(String),
 }
 
-impl MOTD {
+impl Motd {
     /// Encodes a MOTD into a string payload that clients understand.
     pub fn encode_payload(&self) -> String {
         let edition = match &self.edition {
@@ -84,20 +84,20 @@ impl MOTD {
     }
 
     /// Decodes a MOTD payload.
-    pub fn decode_payload(payload: &str) -> Option<MOTD> {
-        let mut parts = payload.split(";");
+    pub fn decode_payload(payload: &str) -> Option<Motd> {
+        let mut parts = payload.split(';');
         let edition = match parts.next() {
             Some("MCPE") => BedrockEdition::PocketEdition,
             Some("MCBE") => BedrockEdition::EducationEdition,
             Some(custom) if !custom.is_empty() => BedrockEdition::Custom(custom.to_owned()),
             _ => return None,
         };
-        let line_one = parts.next().map(&str::to_owned).unwrap_or_default();
+        let line_one = parts.next().map(str::to_owned).unwrap_or_default();
         let protocol_version = parts
             .next()
             .and_then(|ver| ver.parse::<u16>().ok())
             .unwrap_or(0);
-        let version_name = parts.next().map(&str::to_owned).unwrap_or_default();
+        let version_name = parts.next().map(str::to_owned).unwrap_or_default();
         let player_count = parts
             .next()
             .and_then(|ver| ver.parse::<usize>().ok())
@@ -110,7 +110,7 @@ impl MOTD {
             .next()
             .and_then(|ver| ver.parse::<i64>().ok())
             .unwrap_or(0);
-        let line_two = parts.next().map(&str::to_owned).unwrap_or_default();
+        let line_two = parts.next().map(str::to_owned).unwrap_or_default();
         let gamemode = match parts.next() {
             Some("Survival") | None => GameMode::Survival,
             Some("Creative") => GameMode::Creative,
@@ -129,7 +129,7 @@ impl MOTD {
             .next()
             .and_then(|ver| ver.parse::<u16>().ok())
             .unwrap_or(0);
-        Some(MOTD {
+        Some(Motd {
             server_uuid,
             edition,
             protocol_version,
@@ -158,7 +158,7 @@ pub async fn ping<A1: ToSocketAddrs, A2: ToSocketAddrs>(
     addr: A2,
     proxy_protocol: bool,
     timeout: Duration,
-) -> anyhow::Result<MOTD> {
+) -> anyhow::Result<Motd> {
     let udp_sock = UdpSocket::bind(local_addr).await?;
     udp_sock.connect(addr).await?;
 
@@ -191,6 +191,6 @@ pub async fn ping<A1: ToSocketAddrs, A2: ToSocketAddrs>(
         return Err(anyhow::anyhow!("Received a reply other than pong"));
     }
     let pong = MessageUnconnectedPong::deserialize(&mut buf)?;
-    let motd = MOTD::decode_payload(&pong.motd).context("empty payload")?;
+    let motd = Motd::decode_payload(&pong.motd).context("empty payload")?;
     Ok(motd)
 }

@@ -214,22 +214,15 @@ impl RaknetProxy {
             }
             (Some(message_type), mut client) => {
                 log::trace!("[{}] Received offline message {:?}", addr, message_type);
-                match message_type {
-                    _ => {
-                        if client.is_none()
-                            || message_type.eq(&RaknetMessage::OpenConnectionRequest1)
-                        {
-                            if let Some(client) = client {
-                                client.close_notify.notify_one();
-                                let _ = client.close_lock.acquire().await;
-                            }
-                            let new_client =
-                                self.new_client(addr, ConnectionStage::Handshake).await?;
-                            client = Some(new_client);
-                        }
-                        client.unwrap().forward_to_server(&data).await;
+                if client.is_none() || message_type.eq(&RaknetMessage::OpenConnectionRequest1) {
+                    if let Some(client) = client {
+                        client.close_notify.notify_one();
+                        let _ = client.close_lock.acquire().await;
                     }
+                    let new_client = self.new_client(addr, ConnectionStage::Handshake).await?;
+                    client = Some(new_client);
                 }
+                client.unwrap().forward_to_server(&data).await;
             }
             _ => {}
         }

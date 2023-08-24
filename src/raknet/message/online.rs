@@ -1,3 +1,5 @@
+#![allow(clippy::comparison_chain)]
+
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use bytes::Buf;

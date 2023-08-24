@@ -52,15 +52,15 @@ impl WriteBuf {
     }
 }
 
-impl Into<ReadBuf> for Vec<u8> {
-    fn into(self) -> ReadBuf {
-        ReadBuf(Bytes::from(self))
+impl From<Vec<u8>> for ReadBuf {
+    fn from(val: Vec<u8>) -> Self {
+        ReadBuf(Bytes::from(val))
     }
 }
 
-impl Into<ReadBuf> for &[u8] {
-    fn into(self) -> ReadBuf {
-        ReadBuf(Bytes::copy_from_slice(self))
+impl From<&[u8]> for ReadBuf {
+    fn from(val: &[u8]) -> Self {
+        ReadBuf(Bytes::copy_from_slice(val))
     }
 }
 
@@ -120,7 +120,7 @@ impl ReadBuf {
         read_guard!(self, len);
         let mut bytes = vec![0u8; len];
         self.0.copy_to_slice(&mut bytes);
-        Ok(String::from_utf8(bytes).map_err(|_| BufError::InvalidString)?)
+        String::from_utf8(bytes).map_err(|_| BufError::InvalidString)
     }
 
     pub fn read_address(&mut self) -> Result<SocketAddr, BufError> {

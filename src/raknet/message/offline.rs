@@ -68,7 +68,7 @@ impl Message for MessageUnconnectedPing {
 
     fn deserialize(buf: &mut ReadBuf) -> Result<Self, MessageError> {
         let timestamp = buf.read_i64()?;
-        let _ = buf.read_magic()?;
+        buf.read_magic()?;
         Ok(Self {
             forward_timestamp: timestamp,
             client_uuid: buf.read_i64()?,
@@ -88,7 +88,7 @@ impl Message for MessageOpenConnectionRequest1 {
 
     fn deserialize(buf: &mut ReadBuf) -> Result<Self, MessageError> {
         let buf_size = buf.0.len() + 1; // consider removed byte from packet id
-        let _ = buf.read_magic()?;
+        buf.read_magic()?;
         Ok(Self {
             raknet_protocol: ProtocolVersion::from_u8(buf.read_u8()?),
             mtu_size: (buf_size + 28)
@@ -109,7 +109,7 @@ impl Message for MessageOpenConnectionReply1 {
     }
 
     fn deserialize(buf: &mut ReadBuf) -> Result<Self, MessageError> {
-        let _ = buf.read_magic()?;
+        buf.read_magic()?;
         Ok(Self {
             server_uuid: buf.read_i64()?,
             use_encryption: buf.read_bool()?,
@@ -129,7 +129,7 @@ impl Message for MessageOpenConnectionRequest2 {
     }
 
     fn deserialize(buf: &mut ReadBuf) -> Result<Self, MessageError> {
-        let _ = buf.read_magic()?;
+        buf.read_magic()?;
         Ok(Self {
             server_address: buf.read_address()?,
             preferred_mtu_size: buf.read_u16()?,
@@ -150,7 +150,7 @@ impl Message for MessageOpenConnectionReply2 {
     }
 
     fn deserialize(buf: &mut ReadBuf) -> Result<Self, MessageError> {
-        let _ = buf.read_magic()?;
+        buf.read_magic()?;
         Ok(Self {
             server_uuid: buf.read_i64()?,
             client_address: buf.read_address()?,
@@ -169,7 +169,7 @@ impl Message for MessageAlreadyConnected {
     }
 
     fn deserialize(buf: &mut ReadBuf) -> Result<Self, MessageError> {
-        let _ = buf.read_magic()?;
+        buf.read_magic()?;
         Ok(Self {
             server_uuid: buf.read_i64()?,
         })
@@ -187,7 +187,7 @@ impl Message for MessageIncompatibleProtocolVersion {
 
     fn deserialize(buf: &mut ReadBuf) -> Result<Self, MessageError> {
         let preferred_protocol = ProtocolVersion::from_u8(buf.read_u8()?);
-        let _ = buf.read_magic()?;
+        buf.read_magic()?;
         let server_uuid = buf.read_i64()?;
         Ok(Self {
             server_uuid,
@@ -209,7 +209,7 @@ impl Message for MessageUnconnectedPong {
     fn deserialize(buf: &mut ReadBuf) -> Result<Self, MessageError> {
         let timestamp = buf.read_i64()?;
         let server_uuid = buf.read_i64()?;
-        let _ = buf.read_magic()?;
+        buf.read_magic()?;
         let motd = buf.read_str()?;
         Ok(Self {
             timestamp,
