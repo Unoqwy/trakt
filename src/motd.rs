@@ -1,9 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use tokio::{
-    sync::{Notify, RwLock, Semaphore},
-    time::{self, MissedTickBehavior},
-};
+use tokio::sync::{RwLock, Semaphore};
 
 use crate::{
     config::ConfigProvider,
@@ -13,9 +10,7 @@ use crate::{
 /// A controller that periodically fetches MOTD information
 /// from the backend and exposes the last successful response.
 pub struct MOTDReflector {
-    scheduler_lock: Semaphore,
     execute_lock: Semaphore,
-    stop_notify: Notify,
 
     /// Config provider.
     config_provider: Arc<ConfigProvider>,
@@ -25,45 +20,11 @@ pub struct MOTDReflector {
 }
 
 impl MOTDReflector {
-    pub fn new(config_provider: Arc<ConfigProvider>) -> Arc<Self> {
-        Arc::new(Self {
-            scheduler_lock: Semaphore::new(1),
+    pub fn new(config_provider: Arc<ConfigProvider>) -> Self {
+        Self {
             execute_lock: Semaphore::new(1),
-            stop_notify: Notify::new(),
             config_provider,
             last_motd: RwLock::new(None),
-        })
-    }
-
-    /// Checks whether the scheduler is currently running.
-    pub fn is_running(&self) -> bool {
-        self.scheduler_lock.available_permits() == 0
-    }
-
-    /// Starts the scheduler.
-    pub fn start(self: Arc<Self>) {
-        if self.is_running() {
-            return;
-        }
-        tokio::spawn(async move {
-            if let Err(err) = self.run().await {
-                log::error!("MOTD reflector stopped with an error: {:?}", err);
-            }
-        });
-    }
-
-    /// Stops the scheduler.
-    ///
-    /// ## Arguments
-    ///
-    /// * `wait` - Whether to wait until the scheduler has actually stopped.
-    pub async fn stop(&self, wait: bool) {
-        if !self.is_running() {
-            return;
-        }
-        self.stop_notify.notify_one();
-        if wait {
-            let _ = self.scheduler_lock.acquire().await;
         }
     }
 
@@ -72,27 +33,9 @@ impl MOTDReflector {
         self.last_motd.read().await.clone()
     }
 
-    /// Runs the scheduler.
-    async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        let refresh_rate = {
-            let config = self.config_provider.read().await;
-            Duration::from_secs(u64::max(config.backend.motd_refresh_rate, 1))
-        };
-        let mut interval = time::interval(refresh_rate);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        let _ = self.scheduler_lock.acquire().await;
-        loop {
-            tokio::select! {
-                _ = self.stop_notify.notified() => return Ok(()),
-
-                _ = interval.tick() => self.execute().await,
-            }
-        }
-    }
-
     /// Fetches the MOTD.
     pub async fn execute(&self) {
-        let _ = self.scheduler_lock.acquire().await;
+        let _permit = self.execute_lock.acquire().await;
         let (local_addr, sources, proxy_protocol) = {
             let config = self.config_provider.read().await;
             let sources = if let Some(source) = &config.backend.motd_source {
@@ -108,7 +51,7 @@ impl MOTDReflector {
             let proxy_protocol = config.proxy_protocol.unwrap_or(true);
             (config.proxy_bind.clone(), sources, proxy_protocol)
         };
-        log::trace!(
+        log::debug!(
             "Fetching MOTD information from backend ({} sources)...",
             sources.len()
         );

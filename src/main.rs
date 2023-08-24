@@ -8,10 +8,12 @@ use simple_logger::SimpleLogger;
 use tokio::io::AsyncBufReadExt;
 
 mod config;
+mod health;
 mod load_balancer;
 mod motd;
 mod proxy;
 mod raknet;
+mod scheduler;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -97,7 +99,7 @@ async fn run_stdin_handler(config_provider: Arc<ConfigProvider>) {
         let line = &buf[0..len].trim();
         match line.to_lowercase().as_str() {
             "reload" => config_provider.reload().await,
-            _ => log::warn!("Unknown command '{}'", line)
+            _ => log::warn!("Unknown command '{}'", line),
         }
     }
 }

@@ -9,6 +9,7 @@ Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 * Efficient Raknet-aware proxying
 * MOTD caching
 * Proxy Protocol support to forward player IPs
+* Health checks (ping) to not send players to servers that are down
 
 ## Usage
 

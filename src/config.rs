@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use log::log_enabled;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, RwLockReadGuard, Notify, futures::Notified};
+use tokio::sync::{Notify, RwLock, RwLockReadGuard};
 
 /// As config may be updated by reloads,
 /// it is proxied behind this provider.
@@ -44,6 +44,8 @@ pub enum LoadBalanceMethod {
 /// Configuration for a backend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendConfig {
+    /// Rate, in seconds, at which to ping servers to check health.
+    pub health_check_rate: u64,
     /// Rate, in seconds, at which to fetch MOTD information.
     pub motd_refresh_rate: u64,
     /// Address of the server to ping to get MOTD information.

@@ -18,6 +18,8 @@ load_balance_method = "round_robin"
 proxy_protocol = true
 
 [backend]
+# Rate, in seconds, at which to ping servers for heatlh checks.
+health_check_rate = 5
 # Rate, in seconds, at which to fetch MOTD information.
 motd_refresh_rate = 20
 # Address of the server to ping to get MOTD information (including player count, etc).

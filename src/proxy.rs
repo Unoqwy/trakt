@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use crate::config::ConfigProvider;
+use crate::health::HealthController;
 use crate::load_balancer::{BackendServer, LoadBalancer};
 use crate::motd::MOTDReflector;
 use crate::raknet::{
@@ -10,6 +11,7 @@ use crate::raknet::{
     frame::Frame,
     message::{Message, MessageUnconnectedPing, MessageUnconnectedPong, RaknetMessage},
 };
+use crate::scheduler::Scheduler;
 use bytes::{Buf, Bytes};
 use tokio::{
     net::{ToSocketAddrs, UdpSocket},
@@ -41,6 +43,8 @@ pub struct RaknetProxy {
     motd_reflector: Arc<MOTDReflector>,
     /// Load balancer.
     load_balancer: LoadBalancer,
+    /// Scheduler.
+    scheduler: Scheduler,
 }
 
 /// A client to the proxy.
@@ -107,8 +111,15 @@ impl RaknetProxy {
         let in_udp_sock = UdpSocket::bind(in_addr).await?;
         let in_bound_port = in_udp_sock.local_addr()?.port();
         let server_uuid = rand::thread_rng().gen();
-        let motd_reflector = MOTDReflector::new(config_provider.clone());
-        let load_balancer = LoadBalancer::init(config_provider.clone()).await;
+        let motd_reflector = Arc::new(MOTDReflector::new(config_provider.clone()));
+        let health_controller = Arc::new(HealthController::new(config_provider.clone()));
+        let load_balancer =
+            LoadBalancer::init(config_provider.clone(), health_controller.clone()).await;
+        let scheduler = Scheduler::new(
+            config_provider.clone(),
+            motd_reflector.clone(),
+            health_controller,
+        );
         Ok(Arc::new(Self {
             in_udp_sock: Arc::new(in_udp_sock),
             in_bound_port,
@@ -117,20 +128,21 @@ impl RaknetProxy {
             clients: Default::default(),
             motd_reflector,
             load_balancer,
+            scheduler,
         }))
     }
 
     /// Reloads configuration.
     pub async fn reload_config(&self) {
         self.load_balancer.reload_config().await;
-        self.motd_reflector.execute().await;
+        self.scheduler.restart().await;
     }
 
     /// Runs the proxy server.
     ///
     /// If stopped graciously it will return `Ok(())`, otherwise it will return an error.
     pub async fn run(self: Arc<Self>) -> anyhow::Result<()> {
-        self.motd_reflector.clone().start();
+        self.scheduler.start();
         log::debug!(
             "Starting Raknet proxy server on {}",
             self.in_udp_sock.local_addr()?
@@ -159,7 +171,7 @@ impl RaknetProxy {
 
     /// Performs a cleanup after the proxy stopped.
     pub async fn cleanup(&self) {
-        self.motd_reflector.stop(true).await;
+        self.scheduler.stop(true).await;
     }
 
     /// Handles incoming data from the UDP socket from the player to the server.
@@ -298,6 +310,7 @@ impl RaknetProxy {
                 }
             }
         });
+        // TODO: Timeout cleanup
         log::debug!(
             "Client initialized: {} <-> {} ({}) | {} total",
             client.addr,

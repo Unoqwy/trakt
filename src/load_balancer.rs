@@ -2,11 +2,12 @@ use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{self, ConfigProvider};
+use crate::health::{HealthController, ServerHealth};
 
 /// The load balancer is responsible for picking the backend to point
 /// new connections to. It also keeps track of the the health of backends.
@@ -16,6 +17,8 @@ pub struct LoadBalancer {
 
     /// Inner state.
     state: Mutex<LoadBalancerExclusiveState>,
+
+    health_controller: Arc<HealthController>,
 }
 
 /// Load balancer state that requires exclusive access (achieved with a mutex).
@@ -40,17 +43,10 @@ enum LoadBalanceAlgorithm {
 pub struct BackendServer {
     /// Remote address of the server.
     pub addr: SocketAddr,
-    /// TODO: Current health status.
+    /// Current health status.
     pub health: RwLock<ServerHealth>,
     /// Current number of clients assigned to that server.
     pub load: AtomicUsize,
-}
-
-/// Health information about a backend server.
-#[derive(Debug, Default)]
-pub struct ServerHealth {
-    /// Whether the server is accessible and well.
-    pub alive: bool,
 }
 
 impl LoadBalancer {
@@ -59,7 +55,11 @@ impl LoadBalancer {
     /// ## Arguments
     ///
     /// * `config_provider` - Config provider
-    pub async fn init(config_provider: Arc<ConfigProvider>) -> Self {
+    /// * `health_controller` - Health Controller
+    pub async fn init(
+        config_provider: Arc<ConfigProvider>,
+        health_controller: Arc<HealthController>,
+    ) -> Self {
         let method = {
             let config = config_provider.read().await;
             config
@@ -74,6 +74,7 @@ impl LoadBalancer {
         let __self = Self {
             config_provider,
             state: Mutex::new(state),
+            health_controller,
         };
         __self.load_config(false).await;
         __self
@@ -133,12 +134,14 @@ impl LoadBalancer {
             if active.is_some() {
                 continue;
             }
-            state.servers.push(Arc::new(BackendServer {
+            let server = Arc::new(BackendServer {
                 addr,
                 health: RwLock::new(ServerHealth::default()),
                 load: AtomicUsize::new(0),
-            }));
+            });
+            state.servers.push(server.clone());
             new_count += 1;
+            self.health_controller.register_server(server).await;
         }
         let server_count = state.servers.len();
         state.servers.retain(|server| seen.contains(&server.addr));
@@ -164,27 +167,65 @@ impl LoadBalancer {
         if server_count == 0 {
             return None;
         }
+        // when all backend servers are marked as alive
+        // it might be an issue specific to pings, hence we still
+        // want to allow players to attempt joining even if health status is wrong
+        let respect_alive_status = {
+            let mut alive_count = 0;
+            for server in state.servers.iter() {
+                let health = server.health.read().await;
+                if health.alive {
+                    alive_count += 1;
+                }
+            }
+            alive_count > 0
+        };
+        log::debug!(
+            "Getting next server from load balancer (algo: {:?}, respect_alive_status: {})",
+            &state.algo,
+            respect_alive_status
+        );
         match &state.algo {
-            LoadBalanceAlgorithm::RoundRobin { index } => {
-                let index = *index;
-                match &mut state.algo {
-                    LoadBalanceAlgorithm::RoundRobin { index } => {
-                        if *index + 1 % server_count == 0 {
-                            *index = 0;
-                        } else {
-                            *index += 1;
+            LoadBalanceAlgorithm::RoundRobin { .. } => {
+                for _ in 0..server_count {
+                    let index = match &mut state.algo {
+                        LoadBalanceAlgorithm::RoundRobin { index } => {
+                            let prev_index = *index;
+                            if prev_index + 1 >= server_count {
+                                *index = 0;
+                            } else {
+                                *index += 1;
+                            }
+                            prev_index
                         }
+                        _ => unreachable!(),
+                    };
+                    match state.servers.get(index) {
+                        Some(server) if respect_alive_status => {
+                            let health = server.health.read().await;
+                            if !health.alive {
+                                continue;
+                            }
+                            return Some(server.clone());
+                        }
+                        Some(server) => return Some(server.clone()),
+                        _ => {}
                     }
-                    _ => unreachable!(),
-                };
-                state.servers.get(index).cloned()
+                }
+                None
             }
             LoadBalanceAlgorithm::LeastConnected => {
-                let mut min_load = 0;
+                let mut min_load = usize::MAX;
                 let mut target = None;
                 for server in state.servers.iter() {
                     let load = server.load.load(Ordering::Acquire);
                     if load < min_load {
+                        if respect_alive_status {
+                            let health = server.health.read().await;
+                            if !health.alive {
+                                continue;
+                            }
+                        }
                         min_load = load;
                         target = Some(server.clone());
                     }
