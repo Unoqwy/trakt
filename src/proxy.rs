@@ -1,4 +1,5 @@
 use rand::Rng;
+use std::collections::hash_map::Entry;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
@@ -180,7 +181,7 @@ impl RaknetProxy {
     ///
     /// * `snapshot` - Recovery snapshot
     pub async fn recover_from_snapshot(&self, snapshot: RaknetProxySnapshot) {
-        let mut servers = HashMap::new();
+        let mut servers: HashMap<SocketAddr, Arc<BackendServer>> = HashMap::new();
         for client in snapshot.clients {
             let addr = match SocketAddr::from_str(&client.addr) {
                 Ok(addr) => addr,
@@ -204,11 +205,22 @@ impl RaknetProxy {
                     continue;
                 }
             };
-            let server = servers
-                .entry(server_addr)
-                .or_insert_with(|| Arc::new(BackendServer::new(server_addr)))
-                .clone();
-            let server_addr = server.addr;
+            let server = match servers.entry(server_addr) {
+                Entry::Occupied(entry) => entry.get().clone(),
+                Entry::Vacant(entry) => {
+                    let server = match self.load_balancer.get_server(server_addr).await {
+                        Some(server) => {
+                            log::debug!("Recovering server {} on active instance", server_addr);
+                            server
+                        }
+                        None => {
+                            log::debug!("Recovering server {} on stale instance", server_addr);
+                            Arc::new(BackendServer::new(server_addr))
+                        }
+                    };
+                    entry.insert(server).clone()
+                }
+            };
             if let Err(err) = self
                 .new_client(
                     addr,
@@ -249,9 +261,8 @@ impl RaknetProxy {
         let mut client_count = 0;
         let mut connected_count = 0;
         for (_, client) in clients.iter() {
-            per_server
-                .entry(client.server.addr)
-                .or_insert_with(|| client.server.load.load(Ordering::Acquire));
+            let server_load = per_server.entry(client.server.addr).or_default();
+            *server_load += 1;
             client_count += 1;
             let stage = client.stage.read().await;
             if matches!(*stage, ConnectionStage::Connected) {

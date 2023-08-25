@@ -165,6 +165,20 @@ impl LoadBalancer {
         }
     }
 
+    /// Gets an active backend server for a given adrress.
+    ///
+    /// If the server exists but is stale (load balancer doesn't know it),
+    /// it will return [`None`].
+    ///
+    /// ## Arguments
+    ///
+    /// * `addr` - Server address
+    pub async fn get_server(&self, addr: SocketAddr) -> Option<Arc<BackendServer>> {
+        let state = self.state.lock().await;
+        let active = state.servers.iter().find(|server| server.addr.eq(&addr));
+        active.cloned()
+    }
+
     /// Gets the next backend server according to the load balancing method.
     ///
     /// Will return [`None`] if no server is available.
