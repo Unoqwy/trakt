@@ -4,6 +4,7 @@ use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use tokio::sync::mpsc;
 
 use crate::config::ConfigProvider;
 use crate::health::HealthController;
@@ -20,7 +21,7 @@ use crate::{raknet, snapshot};
 use bytes::{Buf, Bytes};
 use tokio::{
     net::{ToSocketAddrs, UdpSocket},
-    sync::{Notify, RwLock, Semaphore},
+    sync::{RwLock, Semaphore},
 };
 
 use ppp::v2 as haproxy;
@@ -76,7 +77,7 @@ struct RaknetClient {
     stage: RwLock<ConnectionStage>,
 
     /// Close notifier.
-    close_notify: Notify,
+    close_tx: mpsc::Sender<DisconnectCause>,
     /// Semaphore used to wait for guaranteed close state.
     close_lock: Semaphore,
 }
@@ -106,6 +107,21 @@ enum Direction {
     PlayerToServer,
     /// Server <-> Player
     ServerToPlayer,
+}
+
+/// Why a player disconnected from a server.
+#[derive(Debug, Clone, Copy)]
+enum DisconnectCause {
+    /// Found disconnect notification from the client.
+    Client,
+    /// Found disconnect notification from the server.
+    Server,
+    /// Connection timed out.
+    Timeout,
+    /// An unexpected error occurred.
+    Error,
+    /// Unknown cause.
+    Unknown,
 }
 
 /// Overview of the load of a [`RaknetProy`].
@@ -373,7 +389,7 @@ impl RaknetProxy {
                 log::trace!("[{}] Received offline message {:?}", addr, message_type);
                 if client.is_none() || message_type.eq(&RaknetMessage::OpenConnectionRequest1) {
                     if let Some(client) = client {
-                        client.close_notify.notify_one();
+                        let _ = client.close_tx.send(DisconnectCause::Unknown).await;
                         let _ = client.close_lock.acquire().await;
                     }
                     let new_client = self
@@ -432,6 +448,7 @@ impl RaknetProxy {
                 None => return Err(anyhow::anyhow!("No server available to proxy this player")),
             },
         };
+        let (tx, rx) = mpsc::channel(1);
         let client = Arc::new(RaknetClient {
             addr,
             server,
@@ -439,7 +456,7 @@ impl RaknetProxy {
             udp_sock_addr: sock.local_addr()?,
             udp_sock: sock,
             stage: RwLock::new(stage),
-            close_notify: Notify::new(),
+            close_tx: tx,
             close_lock: Semaphore::new(0),
         });
         clients.insert(addr, client.clone());
@@ -448,7 +465,7 @@ impl RaknetProxy {
             let clients = self.clients.clone();
             async move {
                 client.server.load.fetch_add(1, Ordering::Relaxed);
-                let loop_result = client.run_event_loop().await;
+                let loop_result = client.run_event_loop(rx).await;
                 let client_count = {
                     let mut clients = clients.write().await;
                     clients.remove(&client.addr);
@@ -462,13 +479,14 @@ impl RaknetProxy {
                 };
                 client.close_lock.add_permits(1);
                 client.server.load.fetch_sub(1, Ordering::Relaxed);
-                match loop_result {
-                    Ok(_) => {
+                let cause = match loop_result {
+                    Ok(cause) => {
                         log::debug!(
                             "Connection closed: {} | {} total",
                             client.addr,
                             client_count,
                         );
+                        cause
                     }
                     Err(err) => {
                         log::debug!(
@@ -477,13 +495,15 @@ impl RaknetProxy {
                             err,
                             client_count
                         );
+                        DisconnectCause::Error
                     }
-                }
+                };
                 if was_connected {
                     log::info!(
-                        "Player {} has disconnected from {}",
+                        "Player {} has disconnected from {} ({})",
                         client.addr,
-                        client.server.addr
+                        client.server.addr,
+                        cause.to_str(),
                     )
                 }
             }
@@ -553,16 +573,22 @@ impl RaknetClient {
     }
 
     /// Runs the client event loop.
-    async fn run_event_loop(&self) -> anyhow::Result<()> {
+    async fn run_event_loop(
+        &self,
+        mut rx: mpsc::Receiver<DisconnectCause>,
+    ) -> anyhow::Result<DisconnectCause> {
         let mut buf = [0u8; 1492];
         // 10 seconds without data from the server = force close
         let timeout = Duration::from_secs(10);
         loop {
             tokio::select! {
-                _ = self.close_notify.notified() => return Ok(()),
+                cause = rx.recv() => return Ok(cause.unwrap_or(DisconnectCause::Unknown)),
 
-                result = tokio::time::timeout(timeout, self.udp_sock.recv(&mut buf)) => {
-                    let len = result??;
+                res = tokio::time::timeout(timeout, self.udp_sock.recv(&mut buf)) => {
+                    let len = match res {
+                        Ok(res) => res?,
+                        Err(_) => return Ok(DisconnectCause::Timeout),
+                    };
                     let data = Bytes::copy_from_slice(&buf[..len]);
                     if let Err(err) = self.handle_incoming_server(data).await {
                         log::debug!(
@@ -609,7 +635,7 @@ impl RaknetClient {
                 "{} Found disconnect notification in datagram",
                 self.debug_prefix(Direction::ServerToPlayer),
             );
-            self.close_notify.notify_one();
+            self.close_tx.send(DisconnectCause::Server).await?;
         }
         Ok(())
     }
@@ -659,7 +685,7 @@ impl RaknetClient {
                 "{} Found disconnect notification in datagram",
                 self.debug_prefix(Direction::PlayerToServer),
             );
-            self.close_notify.notify_one();
+            self.close_tx.send(DisconnectCause::Client).await?;
         }
         Ok(())
     }
@@ -737,6 +763,22 @@ impl RaknetClient {
                 "[server: {} ({}) -> player {}]]",
                 self.server.addr, self.udp_sock_addr, self.addr
             ),
+        }
+    }
+}
+
+impl DisconnectCause {
+    pub fn to_str(self) -> &'static str {
+        match self {
+            // We don't know whether the server sent a Disconnect GAME packet,
+            // and the first disconnect notification that will be seen will be from the client.
+            // Since I don't want to have to spy inside GAME packets (compression, encryption,
+            // incur CPU cost, etc) it will most likely remain like this.
+            Self::Client => "normal",
+            Self::Server => "server",
+            Self::Timeout => "timeout",
+            Self::Error => "unexpected error",
+            Self::Unknown => "unknown",
         }
     }
 }
