@@ -29,10 +29,10 @@ struct Args {
     /// Disable reading from standard input for commands.
     #[arg(long)]
     ignore_stdin: bool,
-    /// Disables colors from output.
+    /// Disable colors from output.
     #[arg(long)]
     no_color: bool,
-    /// Raises the maximum number of open files allowed to avoid issues.
+    /// Raise the maximum number of open files allowed to avoid issues.
     ///
     /// Not enabled by default as it may not work in all environments.
     #[arg(long)]
@@ -141,6 +141,12 @@ async fn run(
     .unwrap();
     if let Some(snapshot) = snapshot {
         proxy.recover_from_snapshot(snapshot).await;
+        tokio::spawn({
+            let config_provider = config_provider.clone();
+            async move {
+                config_provider.reload().await;
+            }
+        });
     }
     if !args.ignore_stdin {
         tokio::spawn({

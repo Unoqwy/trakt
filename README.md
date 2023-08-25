@@ -31,16 +31,17 @@ Make sure you have a recent version of the rust toolchain installed.
 Usage: trakt [OPTIONS]
 
 Options:
-  -c, --config <FILE>  Configuration file
+  -c, --config <FILE>  Configuration file [default: config.toml]
   -v, --verbose...     Verbose level
       --ignore-stdin   Disable reading from standard input for commands
-      --no-color       Disables colors from output
-      --raise-ulimit   Raises the maximum number of open files allowed to avoid issues
+      --no-color       Disable colors from output
+      --raise-ulimit   Raise the maximum number of open files allowed to avoid issues
+      --recovery-snapshot-file <FILE>  Snapshot file for restart recovery [default: .trakt_recover]
   -h, --help           Print help (see more with '--help')
   -V, --version        Print version
 ```
 
-To create the config file, it's recommend to copy [config.example.toml](./config.example.toml) from this repository. You can then edit it to fit your needs.
+To create the config file, it's recommended to copy [config.example.toml](./config.example.toml) from this repository. You can then edit it to fit your needs.
 
 ### Reloading
 
@@ -57,4 +58,4 @@ Before linking it, make sure the command in `ExecStart` matches your installatio
 - Binary installed in `/usr/local/bin/trakt`
 - Config file in `/etc/trakt.toml`
 
-Note: There is currently no practical way to reload the config when running trakt a systemd service.
+Note: There is currently no practical way to dynamically reload the config when running trakt as a systemd service.
