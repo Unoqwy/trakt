@@ -70,11 +70,11 @@ fn main() {
             if snapshot
                 .taken_at
                 .elapsed()
-                .map(|elapsed| elapsed >= Duration::from_secs(15))
+                .map(|elapsed| elapsed >= Duration::from_secs(10))
                 .unwrap_or(true) =>
         {
             log::warn!(
-                "Recovery snapshot file exsits but dates back from more than 15 seconds. Ignoring."
+                "Recovery snapshot file exsits but dates back from more than 10 seconds. Ignoring."
             );
             None
         }
