@@ -47,15 +47,9 @@ To create the config file, it's recommended to copy [config.example.toml](./conf
 
 The configuration can be reloaded without restarting trakt. To do so, type `reload` in the program's console.
 
-### As a systemd service
+### As a library
 
-A sample systemd service file is provided in [pkg/trakt.service](./pkg/trakt.service).
+If you need a custom load balancer to integrate with the rest of your infrastructure, this porject can be used as a library to build on top of.
 
-You can use `sudo systemctl link $(realpath pkg/trakt.service)` to link it.
+Your starting point should be adding `trakt_core` as a dependency. You can then look at documentation, and check out how trakt itself uses the library [here](./src).
 
-Before linking it, make sure the command in `ExecStart` matches your installation. By default, you need the following:
-
-- Binary installed in `/usr/local/bin/trakt`
-- Config file in `/etc/trakt.toml`
-
-Note: There is currently no practical way to dynamically reload the config when running trakt as a systemd service.
