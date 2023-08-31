@@ -8,6 +8,12 @@ bind = "0.0.0.0:19132"
 # Please keep the port to 0 to let the OS allocate an available port for each client.
 proxy_bind = "0.0.0.0:0"
 
+# Rate, in seconds, at which to ping servers for heatlh checks.
+health_check_rate = 5
+# Rate, in seconds, at which to fetch MOTD information.
+motd_refresh_rate = 20
+
+[backend]
 # Load balancing method to use.
 #
 # Available: round_robin, least_connected
@@ -17,11 +23,6 @@ load_balance_method = "round_robin"
 # You may need to configure your server software to support it.
 proxy_protocol = true
 
-[backend]
-# Rate, in seconds, at which to ping servers for heatlh checks.
-health_check_rate = 5
-# Rate, in seconds, at which to fetch MOTD information.
-motd_refresh_rate = 20
 # Address of the server to ping to get MOTD information (including player count, etc).
 # Leave it commented out to fetch it from any of the configured servers below (recommended).
 #motd_source = "127.0.0.1:30030"
@@ -29,5 +30,7 @@ motd_refresh_rate = 20
 # Servers to proxy/load balance players to.
 servers = [
   { address = "127.0.0.1:30031" },
-  { address = "127.0.0.1:30032" },
+  # When 'proxy_protocol' is specified for a server, it will be used over the global setting.
+  { address = "127.0.0.1:30032", proxy_protocol = false },
 ]
+

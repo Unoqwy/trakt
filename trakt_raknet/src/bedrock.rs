@@ -10,7 +10,7 @@ use tokio::{
     time::Instant,
 };
 
-use crate::raknet::{
+use crate::{
     datatypes::ReadBuf,
     message::{Message, MessageUnconnectedPing, RaknetMessage},
 };

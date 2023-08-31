@@ -2,39 +2,34 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::sync::{Notify, Semaphore};
 
-use crate::{config::ConfigProvider, health::HealthController, motd::MOTDReflector};
+use crate::{config::RuntimeConfigProvider, BackendPlatform, ProxyServer};
 
 /// A [`Scheduler`] is responsible for handling repeating tasks.
-/// Used for [`crate::motd::MOTDReflector`] and [`crate::health::HealthController`].
-pub struct Scheduler(Arc<Internals>);
+/// Used for health checks and MOTD caching.
+pub struct Scheduler<S>(Arc<Internals<S>>);
 
-struct Internals {
+struct Internals<S> {
     lock: Semaphore,
     stop_notify: Notify,
 
-    config_provider: Arc<ConfigProvider>,
+    /// Runtime config provider.
+    config_provider: Arc<RuntimeConfigProvider>,
 
-    motd_reflector: Arc<MOTDReflector>,
-    health_controller: Arc<HealthController>,
+    /// Proxy server.
+    proxy_server: Arc<S>,
 }
 
-impl Scheduler {
-    pub fn new(
-        config_provider: Arc<ConfigProvider>,
-        motd_reflector: Arc<MOTDReflector>,
-        health_controller: Arc<HealthController>,
-    ) -> Self {
+impl<S: ProxyServer + 'static> Scheduler<S> {
+    pub fn new(config_provider: Arc<RuntimeConfigProvider>, proxy_server: Arc<S>) -> Self {
         let internals = Internals {
             lock: Semaphore::new(1),
             stop_notify: Notify::new(),
             config_provider,
-            motd_reflector,
-            health_controller,
+            proxy_server,
         };
         Self(Arc::new(internals))
     }
 
-    /// Checks whether the scheduler is currently running.
     pub fn is_running(&self) -> bool {
         self.0.lock.available_permits() == 0
     }
@@ -77,13 +72,12 @@ impl Scheduler {
     }
 }
 
-impl Internals {
+impl<S: ProxyServer + 'static> Internals<S> {
     async fn run(&self) -> anyhow::Result<()> {
         let (motd_rate, health_check_rate) = {
             let config = self.config_provider.read().await;
-            let motd_rate = Duration::from_secs(u64::max(config.backend.motd_refresh_rate, 1));
-            let health_check_rate =
-                Duration::from_secs(u64::max(config.backend.health_check_rate, 1));
+            let motd_rate = Duration::from_secs(u64::max(config.motd_refresh_rate, 1));
+            let health_check_rate = Duration::from_secs(u64::max(config.health_check_rate, 1));
             (motd_rate, health_check_rate)
         };
         let mut motd_interval = tokio::time::interval(motd_rate);
@@ -94,17 +88,37 @@ impl Internals {
 
                 _ = motd_interval.tick() => {
                     tokio::spawn({
-                        let motd_reflector = self.motd_reflector.clone();
-                        async move { motd_reflector.execute().await }
+                        let proxy_server = self.proxy_server.clone();
+                        async move { Internals::update_motd(proxy_server).await }
                     });
                 },
                 _ = health_check_interval.tick() => {
                     tokio::spawn({
-                        let health_controller = self.health_controller.clone();
-                        async move { health_controller.execute().await }
+                        let proxy_server = self.proxy_server.clone();
+                        async move { Internals::check_health(proxy_server).await }
                     });
                 },
             }
+        }
+    }
+
+    async fn update_motd(proxy_server: Arc<S>) {
+        for backend in proxy_server.get_backends().await {
+            tokio::spawn(async move {
+                match &backend.platform {
+                    BackendPlatform::Bedrock { motd_cache, .. } => {
+                        motd_cache.update().await;
+                    }
+                }
+            });
+        }
+    }
+
+    async fn check_health(proxy_server: Arc<S>) {
+        for backend in proxy_server.get_backends().await {
+            tokio::spawn(async move {
+                backend.health_controller.execute().await;
+            });
         }
     }
 }

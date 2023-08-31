@@ -1,26 +1,32 @@
 [package]
 name = "trakt"
-description = "Load balancer for Minecraft Bedrock Edition"
-version = "0.1.1"
+description = "Reverse proxy and load balancer for Minecraft: Bedrock Edition"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 
 [dependencies]
-clap = { version = "4.3", features = ["derive"] }
+trakt_core = { path = "./trakt_core" }
+
 log = "0.4.20"
+anyhow = "1.0"
+tokio = { version = "1.32", features = ["full"] }
+
+clap = { version = "4.3", features = ["derive"] }
 simple_logger = "4.2"
 
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 toml = "0.7"
 
 fdlimit = "0.2.1"
-anyhow = "1.0"
-bytes = "1.4"
-rand = "0.8"
-tokio = { version = "1.32", features = ["full"] }
-ppp = "2.2"
 
 [[bin]]
 path = "src/main.rs"
 name = "trakt"
+
+[workspace]
+members = [
+  "trakt_core",
+  "trakt_raknet",
+]
+

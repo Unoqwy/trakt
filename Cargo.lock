@@ -73,6 +73,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
 
 [[package]]
+name = "async-trait"
+version = "0.1.73"
+source = "git+https://github.com/Unoqwy/async-trait?rev=4ac94682269f366ee3c8bb83332616a656b77d5c#4ac94682269f366ee3c8bb83332616a656b77d5c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -724,20 +734,44 @@ dependencies = [
 
 [[package]]
 name = "trakt"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
- "bytes",
  "clap",
  "fdlimit",
+ "log",
+ "serde",
+ "simple_logger",
+ "tokio",
+ "toml",
+ "trakt_core",
+]
+
+[[package]]
+name = "trakt_core"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
  "log",
  "ppp",
  "rand",
  "serde",
  "serde_json",
- "simple_logger",
  "tokio",
- "toml",
+ "trakt_raknet",
+]
+
+[[package]]
+name = "trakt_raknet"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "log",
+ "ppp",
+ "tokio",
 ]
 
 [[package]]

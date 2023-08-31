@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use crate::raknet::datatypes::{ReadBuf, WriteBuf};
-use crate::raknet::ProtocolVersion;
+use crate::datatypes::{ReadBuf, WriteBuf};
+use crate::ProtocolVersion;
 
 use super::{write_header, Message, MessageError, RaknetMessage};
 

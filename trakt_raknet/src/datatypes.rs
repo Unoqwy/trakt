@@ -52,6 +52,12 @@ impl WriteBuf {
     }
 }
 
+impl Default for WriteBuf {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl From<Vec<u8>> for ReadBuf {
     fn from(val: Vec<u8>) -> Self {
         ReadBuf(Bytes::from(val))

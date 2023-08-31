@@ -1,10 +1,10 @@
-use std::{fs, path::Path, time::SystemTime};
+use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::RootConfig;
+use crate::config::RuntimeConfig;
 
-/// A snapshot of a [`crate::proxy::RaknetProxy`] state, used
+/// A snapshot of a [`crate::bedrock::RaknetProxyServer`], used
 /// to recover UDP connections after a restart (if it only takes a few seconds).
 ///
 /// It contains only the necessary information to recover clients,
@@ -19,9 +19,9 @@ pub struct RaknetProxySnapshot {
     pub taken_at: SystemTime,
     /// Configuration in use at the time of the snapshot.
     ///
-    /// The restarting bot will use this, then once everything has
-    /// recovered try to parse the requested config file.
-    pub config: RootConfig,
+    /// The restarting proxy will use this first, then once everything
+    /// has recovered, it will try reload the configuration.
+    pub config: RuntimeConfig,
     /// Player <-> Proxy bind socket address.
     pub player_proxy_bind: String,
     /// Connected clients.
@@ -37,34 +37,18 @@ pub struct RaknetClientSnapshot {
     pub addr: String,
     /// Socket address of the backend server.
     pub server_addr: String,
+    /// Whether proxy protocol is enabled for the server.
+    #[serde(default)] // since 0.2.0
+    pub server_proxy_protocol: bool,
     /// Proxy <-> Server bind socket address for this client.
     pub proxy_server_bind: String,
 }
 
-/// Writes a [`RaknetProxySnapshot`] into a file.
-///
-/// ## Arguments
-///
-/// * `path` - File path
-pub fn write_snapshot_file<P: AsRef<Path>>(
-    path: P,
-    snapshot: &RaknetProxySnapshot,
-) -> anyhow::Result<()> {
-    let serialized = serde_json::to_string(snapshot)?;
-    fs::write(path, serialized)?;
-    Ok(())
-}
-
-/// Reads a [`RaknetProxySnapshot`] from a file.
-///
-/// ## Arguments
-///
-/// * `path` - File path
-pub fn read_snapshot_file<P: AsRef<Path>>(path: P) -> anyhow::Result<Option<RaknetProxySnapshot>> {
-    if !path.as_ref().try_exists()? {
-        return Ok(None);
+impl RaknetProxySnapshot {
+    pub fn has_expired(&self) -> bool {
+        self.taken_at
+            .elapsed()
+            .map(|elapsed| elapsed >= Duration::from_secs(10))
+            .unwrap_or(true)
     }
-    let contents = fs::read_to_string(&path)?;
-    let deserialized: RaknetProxySnapshot = serde_json::from_str(&contents)?;
-    Ok(Some(deserialized))
 }

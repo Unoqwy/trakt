@@ -2,28 +2,33 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::sync::{RwLock, Semaphore};
 
-use crate::{
-    config::ConfigProvider,
-    raknet::ping::{self, Motd},
-};
+use raknet::bedrock::{ping, Motd};
+
+use crate::{config::RuntimeConfigProvider, BackendState};
 
 /// A controller that periodically fetches MOTD information
 /// from the backend and exposes the last successful response.
-pub struct MOTDReflector {
-    execute_lock: Semaphore,
+pub struct BedrockMotdCache {
+    update_lock: Semaphore,
 
-    /// Config provider.
-    config_provider: Arc<ConfigProvider>,
+    /// Runtime config provider.
+    config_provider: Arc<RuntimeConfigProvider>,
+    /// Backend state.
+    backend_state: Arc<RwLock<BackendState>>,
 
     /// Last successful MOTD response, if any.
     last_motd: RwLock<Option<Motd>>,
 }
 
-impl MOTDReflector {
-    pub fn new(config_provider: Arc<ConfigProvider>) -> Self {
+impl BedrockMotdCache {
+    pub fn new(
+        config_provider: Arc<RuntimeConfigProvider>,
+        backend_state: Arc<RwLock<BackendState>>,
+    ) -> Self {
         Self {
-            execute_lock: Semaphore::new(1),
+            update_lock: Semaphore::new(1),
             config_provider,
+            backend_state,
             last_motd: RwLock::new(None),
         }
     }
@@ -33,23 +38,16 @@ impl MOTDReflector {
         self.last_motd.read().await.clone()
     }
 
-    /// Fetches the MOTD.
-    pub async fn execute(&self) {
-        let _permit = self.execute_lock.acquire().await;
-        let (local_addr, sources, proxy_protocol) = {
+    /// Fetches MOTD information and updates the cache.
+    pub async fn update(&self) {
+        let _permit = self.update_lock.acquire().await;
+        let local_addr = {
             let config = self.config_provider.read().await;
-            let sources = if let Some(source) = &config.backend.motd_source {
-                vec![source.clone()]
-            } else {
-                config
-                    .backend
-                    .servers
-                    .iter()
-                    .map(|server| server.address.clone())
-                    .collect()
-            };
-            let proxy_protocol = config.proxy_protocol.unwrap_or(true);
-            (config.proxy_bind.clone(), sources, proxy_protocol)
+            config.proxy_bind.clone()
+        };
+        let sources = {
+            let state = self.backend_state.read().await;
+            state.motd_sources_or_default()
         };
         log::debug!(
             "Fetching MOTD information from backend ({} sources)...",
@@ -57,11 +55,11 @@ impl MOTDReflector {
         );
         let timeout = Duration::from_secs(5);
         for source in sources.into_iter() {
-            match ping::ping(&local_addr, &source, proxy_protocol, timeout).await {
+            match ping(&local_addr, &source.addr, source.proxy_protocol, timeout).await {
                 Ok(motd) => {
                     log::debug!(
                         "Successfully fetched MOTD information from source {}: {:?}",
-                        source,
+                        source.addr,
                         motd
                     );
                     let mut w = self.last_motd.write().await;
@@ -70,7 +68,7 @@ impl MOTDReflector {
                 Err(err) => {
                     log::warn!(
                         "Could not fetch MOTD information from source {}: {:?}",
-                        source,
+                        source.addr,
                         err
                     );
                 }

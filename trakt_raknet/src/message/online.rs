@@ -4,7 +4,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use bytes::Buf;
 
-use crate::raknet::datatypes::{BufError, ReadBuf, WriteBuf};
+use crate::datatypes::{BufError, ReadBuf, WriteBuf};
 
 use super::{write_header, Message, MessageError, RaknetMessage};
 
