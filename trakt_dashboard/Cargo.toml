@@ -1,9 +1,9 @@
 [package]
-name = "trakt_core"
-description = "Reverse proxy and load balancer library for Minecraft: Bedrock Edition"
-version = "0.2.0"
+name = "trakt_dashboard"
+description = "Web dashboard for Trakt"
+version = "0.1.0"
 edition = "2021"
-license = "MIT"
+publish = false
 
 [dependencies]
 trakt_api = { path = "../trakt_api" }
@@ -12,17 +12,16 @@ log = "0.4.20"
 anyhow = "1.0"
 tokio = { version = "1.32", features = ["full"] }
 
+axum = "0.6.20"
+axum-htmx = "0.3.1"
+askama = { version = "0.12", features = ["with-axum"] }
+askama_axum = "0.3"
+tower-livereload = "0.8.1"
+
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
-bytes = "1.4"
-rand = "0.8"
-ppp = "2.2"
-
-[dependencies.raknet]
-path = "../trakt_raknet"
-package = "trakt_raknet"
 
 [dependencies.async-trait]
 git = "https://github.com/Unoqwy/async-trait"
 rev = "4ac94682269f366ee3c8bb83332616a656b77d5c"
+

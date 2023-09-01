@@ -7,10 +7,13 @@ license = "MIT"
 
 [dependencies]
 trakt_core = { path = "./trakt_core" }
+trakt_api = { path = "./trakt_api" }
+trakt_dashboard = { path = "./trakt_dashboard" }
 
 log = "0.4.20"
 anyhow = "1.0"
 tokio = { version = "1.32", features = ["full"] }
+futures = "0.3.28"
 
 clap = { version = "4.3", features = ["derive"] }
 simple_logger = "4.2"
@@ -20,13 +23,19 @@ toml = "0.7"
 
 fdlimit = "0.2.1"
 
+[dependencies.async-trait]
+git = "https://github.com/Unoqwy/async-trait"
+rev = "4ac94682269f366ee3c8bb83332616a656b77d5c"
+
 [[bin]]
 path = "src/main.rs"
 name = "trakt"
 
 [workspace]
 members = [
+  "trakt_api",
   "trakt_core",
+  "trakt_dashboard",
   "trakt_raknet",
 ]
 

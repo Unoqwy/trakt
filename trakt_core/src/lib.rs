@@ -14,6 +14,7 @@
 //! the moment, this is meant to be expandable to add Java Edition
 //! support at some point.
 
+pub mod api;
 mod backend;
 pub mod bedrock;
 pub mod config;

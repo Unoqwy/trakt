@@ -1,14 +1,17 @@
 use std::{path::PathBuf, process::exit, str::FromStr, sync::Arc};
 
 use clap::Parser;
+use futures::future;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use tokio::io::AsyncBufReadExt;
+use trakt_api::{model, provider::TraktApiRead};
 use trakt_core::{
+    api::IntoApiModel,
     bedrock::{snapshot::RaknetProxySnapshot, RaknetProxyServer},
     config::{LoadBalanceMethod, RuntimeConfig, RuntimeConfigProvider},
     snapshot::{self, RecoverableProxyServer},
-    Backend, DefaultLoadBalancer, Proxy,
+    Backend, DefaultLoadBalancer, Proxy, ProxyServer,
 };
 
 mod config;
@@ -161,6 +164,34 @@ async fn main() {
             }
         });
     }
+
+    tokio::spawn({
+        let proxy = proxy.clone();
+        async move {
+            struct Api(Arc<Proxy<RaknetProxyServer>>);
+
+            #[async_trait::async_trait]
+            impl TraktApiRead for Api {
+                async fn get_backends(&self) -> Vec<model::Backend> {
+                    let iter = self
+                        .0
+                        .server
+                        .get_backends()
+                        .await
+                        .into_iter()
+                        .map(|backend| async move { backend.into_api_model().await });
+                    future::join_all(iter).await
+                }
+
+                async fn get_backend(&self, id: &str) -> Option<model::Backend> {
+                    None
+                }
+            }
+
+            let api = Box::new(Api(proxy));
+            trakt_dashboard::start(api).await.unwrap();
+        }
+    });
 
     tokio::spawn({
         let proxy = proxy.clone();
