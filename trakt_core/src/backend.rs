@@ -3,13 +3,13 @@ use std::{
     net::SocketAddr,
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Weak,
     },
 };
 
 use rand::Rng;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::{
     bedrock::BedrockMotdCache,
@@ -23,7 +23,9 @@ use crate::{
 /// Each backend has its own load balancer to decide
 /// where to send new connections to.
 pub struct Backend {
-    /// Backend ID.
+    /// Unique ID (not persistent across restart).
+    pub uid: Uuid,
+    /// Backend local ID.
     pub id: String,
     /// Health controller.
     pub health_controller: HealthController,
@@ -60,18 +62,29 @@ pub enum BackendPlatform {
     },
 }
 
-/// A [`BackendServer`] is a Minecraft Bedrock Edition server/proxy
+/// A [`BackendServer`] is a Minecraft server
 /// to which traffic can be routed to.
 #[derive(Debug)]
 pub struct BackendServer {
+    /// Unique ID (not persistent across restart).
+    pub uid: Uuid,
     /// Remote address of the server.
     pub addr: SocketAddr,
+    /// Mutable state.
+    pub state: RwLock<BackendServerState>,
+}
+
+/// Mutable state of a [`BackendServer`].
+#[derive(Debug, Clone, Default)]
+pub struct BackendServerState {
     /// Whether the remote server supports proxy protocol.
-    pub proxy_protocol: AtomicBool,
+    pub proxy_protocol: bool,
     /// Server health.
-    pub health: RwLock<ServerHealth>,
+    pub health: ServerHealth,
     /// Load score.
-    pub load_score: AtomicUsize,
+    pub load_score: usize,
+    /// Online players.
+    pub connected_players: HashSet<SocketAddr>,
 }
 
 /// A [`MotdSource`] is similar to a [`BackendServer`],
@@ -107,7 +120,7 @@ impl Backend {
     /// * `load_balancer_fn` - Load balancer producer
     /// * `config_provider` - Runtime config provider
     /// * `backend_config` - Config to initialize the backend with
-    pub fn new_bedrock<F>(
+    pub async fn new_bedrock<F>(
         id: String,
         load_balancer_fn: F,
         config_provider: Arc<RuntimeConfigProvider>,
@@ -118,7 +131,7 @@ impl Backend {
     {
         let mut state: BackendState = Default::default();
         let load_result = match backend_config {
-            Some(config) => state.load_config(config, false),
+            Some(config) => state.load_config(config, false).await,
             None => BackendLoadResult::default(),
         };
         let state = Arc::new(RwLock::new(state));
@@ -131,6 +144,7 @@ impl Backend {
             server_uuid,
         };
         let backend = Self {
+            uid: Uuid::new_v4(),
             id,
             health_controller,
             load_balancer,
@@ -143,17 +157,37 @@ impl Backend {
 
 impl BackendServer {
     pub fn new(addr: SocketAddr, proxy_protocol: bool) -> Self {
+        let mut state: BackendServerState = Default::default();
+        state.proxy_protocol = proxy_protocol;
         Self {
+            uid: Uuid::new_v4(),
             addr,
-            proxy_protocol: AtomicBool::new(proxy_protocol),
-            health: Default::default(),
-            load_score: AtomicUsize::new(0),
+            state: RwLock::new(state),
         }
     }
 
     /// Returns whether the remote server uses proxy protocol.
-    pub fn use_proxy_protocol(&self) -> bool {
-        self.proxy_protocol.load(Ordering::Acquire)
+    pub async fn use_proxy_protocol(&self) -> bool {
+        let state = self.state.read().await; 
+        state.proxy_protocol
+    }
+
+    /// Returns whether the server's health is alive.
+    pub async fn is_alive(&self) -> bool {
+        let state = self.state.read().await; 
+        state.health.alive
+    }
+
+    /// Modifies the load score by a delta.
+    ///
+    /// This uses saturating operations to ensure it never overflows
+    pub async fn modify_load(&self, delta: isize) {
+        let mut state = self.state.write().await; 
+        if delta >= 0 {
+            state.load_score = state.load_score.saturating_add(delta as usize);
+        } else {
+            state.load_score = state.load_score.saturating_sub(-delta as usize);
+        }
     }
 }
 
@@ -165,22 +199,24 @@ impl Backend {
     /// * `backend_config` - Backend configuration
     pub async fn reload_config(&self, backend_config: &BackendConfig) -> BackendLoadResult {
         let mut state = self.state.write().await;
-        state.load_config(backend_config, true)
+        state.load_config(backend_config, true).await
     }
 }
 
 impl BackendState {
     /// Returns configured MOTD sources or default to
     /// active backend servers.
-    pub fn motd_sources_or_default(&self) -> Vec<MotdSource> {
+    pub async fn motd_sources_or_default(&self) -> Vec<MotdSource> {
         if self.motd_sources.is_empty() {
-            self.servers
-                .iter()
-                .map(|server| MotdSource {
+            let mut sources = Vec::with_capacity(self.servers.len());
+            for server in self.servers.iter() {
+                let source = MotdSource {
                     addr: server.addr,
-                    proxy_protocol: server.use_proxy_protocol(),
-                })
-                .collect()
+                    proxy_protocol: server.use_proxy_protocol().await,
+                };
+                sources.push(source);
+            }
+            sources
         } else {
             self.motd_sources.clone()
         }
@@ -219,7 +255,7 @@ impl BackendState {
     ///
     /// * `backend_config` - Backend configuration
     /// * `reload` - Whether this is a reload
-    pub fn load_config(
+    pub async fn load_config(
         &mut self,
         backend_config: &BackendConfig,
         reload: bool,
@@ -250,9 +286,8 @@ impl BackendState {
                 .unwrap_or(backend_config.proxy_protocol);
             let active = self.servers.iter_mut().find(|server| server.addr.eq(&addr));
             if let Some(active) = active {
-                active
-                    .proxy_protocol
-                    .store(proxy_protocol, Ordering::Release);
+                let mut active_state = active.state.write().await;
+                active_state.proxy_protocol = proxy_protocol;
                 continue;
             }
             let server = Arc::new(BackendServer::new(addr, proxy_protocol));

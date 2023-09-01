@@ -1,4 +1,4 @@
-//! Trakt Web dashboard.
+//! Trakt web-based Dashboard.
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 

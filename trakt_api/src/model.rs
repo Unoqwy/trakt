@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -10,9 +11,21 @@ pub enum GameEdition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Proxy {
+    /// API unique ID.
+    pub uid: Uuid,
+    /// Proxy name.
+    pub name: String,
+    /// Backends.
+    pub backends: Vec<Backend>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Backend {
-    /// Backend ID.
-    pub id: String,
+    /// API unique ID.
+    pub uid: Uuid,
+    /// Backend name.
+    pub name: String,
     /// Game edition.
     pub game_edition: GameEdition,
     /// Servers.
@@ -21,6 +34,8 @@ pub struct Backend {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Server {
+    /// API unique ID.
+    pub uid: Uuid,
     /// Remote server address.
     pub address: String,
     /// Server status.
@@ -29,6 +44,11 @@ pub struct Server {
     pub health: ServerHealth,
     /// Load score.
     pub load_score: usize,
+    /// Number of online players.
+    ///
+    /// Only accounts for players connected through the proxy,
+    /// more may be online if connected from other sources.
+    pub player_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use trakt_api::model::{self, GameEdition};
 
 use crate::{Backend, BackendPlatform, BackendServer};
@@ -34,7 +32,8 @@ impl IntoApiModel for Backend {
             servers.push(server.into_api_model().await);
         }
         model::Backend {
-            id: self.id.clone(),
+            uid: self.uid.clone(),
+            name: self.id.clone(),
             game_edition,
             servers,
         }
@@ -46,19 +45,19 @@ impl IntoApiModel for BackendServer {
     type Model = model::Server;
 
     async fn into_api_model(&self) -> Self::Model {
-        let health = {
-            let status = self.health.read().await;
-            model::ServerHealth {
-                alive: status.alive,
-                ever_alive: status.ever_alive,
-            }
+        let state = self.state.read().await;
+        let health = model::ServerHealth {
+            alive: state.health.alive,
+            ever_alive: state.health.ever_alive,
         };
-        let load_score = self.load_score.load(Ordering::Acquire);
+        let player_count = state.connected_players.len();
         model::Server {
+            uid: self.uid.clone(),
             address: self.addr.to_string(),
             status: model::ServerStatus::Active,
             health,
-            load_score,
+            load_score: state.load_score,
+            player_count,
         }
     }
 }

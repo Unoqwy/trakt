@@ -132,7 +132,7 @@ async fn main() {
         },
         config_provider.clone(),
         config.as_ref().map(|config| &config.backend),
-    );
+    ).await;
     log::info!("Loaded {} backend servers", load_result.server_count);
     let proxy_server = RaknetProxyServer::bind(
         bind_address,

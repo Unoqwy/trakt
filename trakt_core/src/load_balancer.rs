@@ -1,4 +1,3 @@
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, RwLock};
@@ -97,8 +96,7 @@ impl LoadBalancer for DefaultLoadBalancer {
         let respect_alive_status = {
             let mut alive_count = 0;
             for server in state.servers.iter() {
-                let health = server.health.read().await;
-                if health.alive {
+                if server.is_alive().await {
                     alive_count += 1;
                 }
             }
@@ -126,8 +124,7 @@ impl LoadBalancer for DefaultLoadBalancer {
                     };
                     match state.servers.get(index) {
                         Some(server) if respect_alive_status => {
-                            let health = server.health.read().await;
-                            if !health.alive {
+                            if !server.is_alive().await {
                                 continue;
                             }
                             return Some(server.clone());
@@ -142,15 +139,14 @@ impl LoadBalancer for DefaultLoadBalancer {
                 let mut min_load = usize::MAX;
                 let mut target = None;
                 for server in state.servers.iter() {
-                    let load = server.load_score.load(Ordering::Acquire);
-                    if load < min_load {
+                    let state = server.state.read().await;
+                    if state.load_score < min_load {
                         if respect_alive_status {
-                            let health = server.health.read().await;
-                            if !health.alive {
+                            if !state.health.alive {
                                 continue;
                             }
                         }
-                        min_load = load;
+                        min_load = state.load_score;
                         target = Some(server.clone());
                     }
                 }

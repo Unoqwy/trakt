@@ -2,7 +2,7 @@ use std::{
     collections::{hash_map::Entry, HashMap},
     net::SocketAddr,
     str::FromStr,
-    sync::{atomic::Ordering, Arc},
+    sync::Arc,
     time::SystemTime,
 };
 
@@ -189,7 +189,7 @@ impl RaknetProxyServer {
             let client = client.clone();
             let clients = self.clients.clone();
             async move {
-                server.load_score.fetch_add(1, Ordering::Relaxed);
+                server.modify_load(1).await;
                 let loop_result = client.run_event_loop(rx).await;
                 let client_count = {
                     let mut clients = clients.write().await;
@@ -203,7 +203,11 @@ impl RaknetProxyServer {
                     was_connected
                 };
                 client.close_lock.add_permits(1);
-                server.load_score.fetch_sub(1, Ordering::Relaxed);
+                {
+                    let mut state = server.state.write().await;
+                    state.load_score = state.load_score.saturating_sub(1);
+                    state.connected_players.remove(&client.addr);
+                }
                 let cause = match loop_result {
                     Ok(cause) => {
                         log::debug!(
@@ -240,7 +244,7 @@ impl RaknetProxyServer {
             client.udp_sock.local_addr()?,
             clients.len()
         );
-        if client.server.use_proxy_protocol() {
+        if client.server.use_proxy_protocol().await {
             client.send_haproxy_info().await?;
         }
         Ok(client)
@@ -351,7 +355,7 @@ impl RecoverableProxyServer for RaknetProxyServer {
             clients.push(RaknetClientSnapshot {
                 addr: client.addr.to_string(),
                 server_addr: client.server.addr.to_string(),
-                server_proxy_protocol: client.server.use_proxy_protocol(),
+                server_proxy_protocol: client.server.use_proxy_protocol().await,
                 proxy_server_bind: client.udp_sock.local_addr()?.to_string(),
             });
         }

@@ -7,7 +7,7 @@ use tokio::{
 use crate::{config::RuntimeConfigProvider, BackendServer, BackendState};
 
 /// Health information about a backend server.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ServerHealth {
     /// Whether the server is accessible and well.
     pub alive: bool,
@@ -50,9 +50,10 @@ impl HealthController {
         let mut join_set = JoinSet::new();
         {
             let mut backend_state = self.backend_state.write().await;
-            let servers = &mut backend_state.known_servers;
-            servers.retain(|server| server.upgrade().is_some());
-            for weak_ref in servers.iter() {
+            backend_state
+                .known_servers
+                .retain(|server| server.upgrade().is_some());
+            for weak_ref in backend_state.known_servers.iter() {
                 let server = match weak_ref.upgrade() {
                     Some(server) => server,
                     None => continue,
@@ -77,12 +78,13 @@ impl HealthController {
         let success = raknet::bedrock::ping(
             &local_addr,
             &server.addr,
-            server.use_proxy_protocol(),
+            server.use_proxy_protocol().await,
             timeout,
         )
         .await
         .is_ok();
-        let mut health = server.health.write().await;
+        let mut server_state = server.state.write().await;
+        let health = &mut server_state.health;
         let prev_alive = health.alive;
         if success {
             health.failed_attempts = 0;
@@ -93,7 +95,7 @@ impl HealthController {
             health.alive = health.ever_alive && health.failed_attempts < 3;
         }
         let alive = health.alive;
-        drop(health);
+        drop(server_state);
         if prev_alive != alive {
             if alive {
                 log::info!("Backend server {} is now alive", &server.addr);

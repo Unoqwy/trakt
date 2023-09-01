@@ -104,7 +104,9 @@ impl RaknetClient {
             let mut w = self.stage.write().await;
             if !matches!(*w, ConnectionStage::Connected) {
                 *w = ConnectionStage::Connected;
-                log::info!("Player {} has connected to {}", self.addr, self.server.addr)
+                log::info!("Player {} has connected to {}", self.addr, self.server.addr);
+                let mut server_state = self.server.state.write().await;
+                server_state.connected_players.insert(self.addr);
             }
         }
         if let Some(message_type) = message_type {

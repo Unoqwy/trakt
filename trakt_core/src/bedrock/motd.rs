@@ -47,7 +47,7 @@ impl BedrockMotdCache {
         };
         let sources = {
             let state = self.backend_state.read().await;
-            state.motd_sources_or_default()
+            state.motd_sources_or_default().await
         };
         log::debug!(
             "Fetching MOTD information from backend ({} sources)...",
