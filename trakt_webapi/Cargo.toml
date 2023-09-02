@@ -1,0 +1,23 @@
+[package]
+name = "trakt_webapi"
+description = "REST API for trakt"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+trakt_api = { path = "../trakt_api" }
+
+log = "0.4.20"
+anyhow = "1.0"
+tokio = { version = "1.32", features = ["full"] }
+
+axum = "0.6.20"
+
+uuid = { version = "1.4", features = ["v4", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dependencies.async-trait]
+git = "https://github.com/Unoqwy/async-trait"
+rev = "4ac94682269f366ee3c8bb83332616a656b77d5c"

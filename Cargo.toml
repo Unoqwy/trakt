@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 trakt_core = { path = "./trakt_core" }
 trakt_api = { path = "./trakt_api" }
+trakt_webapi = { path = "./trakt_webapi", optional = true }
 trakt_dashboard = { path = "./trakt_dashboard", optional = true }
 
 log = "0.4.20"
@@ -38,5 +39,6 @@ members = [
   "trakt_core",
   "trakt_dashboard",
   "trakt_raknet",
+  "trakt_webapi",
 ]
 

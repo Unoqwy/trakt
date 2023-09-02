@@ -185,6 +185,13 @@ async fn main() {
         }
     });
 
+    tokio::spawn({
+        let proxy = proxy.clone();
+        async move {
+            let api = SingleProxyApi::new("node1", proxy.server.clone());
+            trakt_webapi::start("0.0.0.0:8084", Box::new(api))
+                .await
+                .unwrap();
         }
     });
 
