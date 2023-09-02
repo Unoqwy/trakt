@@ -5,6 +5,7 @@ version = "0.1.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/Unoqwy/trakt"
+readme = "README-cratesio.md"
 keywords = ["minecraft", "bedrock", "proxy"]
 
 [dependencies]
