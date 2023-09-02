@@ -4,6 +4,8 @@ Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 
 **WARNING: This is brand new. Reliability/performance claims may not yet be true.**
 
+Project Status: Development is happening on branch `v0.2`, with additions such as an API.
+
 ## Features
 
 - Efficient Raknet-aware proxying
@@ -14,6 +16,12 @@ Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 - Ability to restart and recover active connections (provided it restarts within a few seconds)
 
 ## Installation
+
+### From crates.io
+
+Make sure you have a recent version of the rust toolchain installed.
+
+Run `cargo install trakt` to build and install the latest published version.
 
 ### From source
 
