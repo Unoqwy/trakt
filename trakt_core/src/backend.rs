@@ -2,9 +2,7 @@ use std::{
     collections::HashSet,
     net::SocketAddr,
     str::FromStr,
-    sync::{
-        Arc, Weak,
-    },
+    sync::{Arc, Weak},
 };
 
 use rand::Rng;
@@ -77,6 +75,8 @@ pub struct BackendServer {
 /// Mutable state of a [`BackendServer`].
 #[derive(Debug, Clone, Default)]
 pub struct BackendServerState {
+    /// If true, the server is no longer used to route new players to.
+    pub stale: bool,
     /// Whether the remote server supports proxy protocol.
     pub proxy_protocol: bool,
     /// Server health.
@@ -156,9 +156,12 @@ impl Backend {
 }
 
 impl BackendServer {
-    pub fn new(addr: SocketAddr, proxy_protocol: bool) -> Self {
-        let mut state: BackendServerState = Default::default();
-        state.proxy_protocol = proxy_protocol;
+    pub fn new(addr: SocketAddr, stale: bool, proxy_protocol: bool) -> Self {
+        let state = BackendServerState {
+            stale,
+            proxy_protocol,
+            ..Default::default()
+        };
         Self {
             uid: Uuid::new_v4(),
             addr,
@@ -168,13 +171,13 @@ impl BackendServer {
 
     /// Returns whether the remote server uses proxy protocol.
     pub async fn use_proxy_protocol(&self) -> bool {
-        let state = self.state.read().await; 
+        let state = self.state.read().await;
         state.proxy_protocol
     }
 
     /// Returns whether the server's health is alive.
     pub async fn is_alive(&self) -> bool {
-        let state = self.state.read().await; 
+        let state = self.state.read().await;
         state.health.alive
     }
 
@@ -182,7 +185,7 @@ impl BackendServer {
     ///
     /// This uses saturating operations to ensure it never overflows
     pub async fn modify_load(&self, delta: isize) {
-        let mut state = self.state.write().await; 
+        let mut state = self.state.write().await;
         if delta >= 0 {
             state.load_score = state.load_score.saturating_add(delta as usize);
         } else {
@@ -287,14 +290,22 @@ impl BackendState {
             let active = self.servers.iter_mut().find(|server| server.addr.eq(&addr));
             if let Some(active) = active {
                 let mut active_state = active.state.write().await;
+                active_state.stale = false;
                 active_state.proxy_protocol = proxy_protocol;
                 continue;
             }
-            let server = Arc::new(BackendServer::new(addr, proxy_protocol));
+            let server = Arc::new(BackendServer::new(addr, false, proxy_protocol));
             new_count += 1;
             self.register_server(server, false);
         }
         let initial_count = self.servers.len();
+        for server in self.servers.iter() {
+            if seen.contains(&server.addr) {
+                continue;
+            }
+            let mut server_state = server.state.write().await;
+            server_state.stale = true;
+        }
         self.servers.retain(|server| seen.contains(&server.addr));
         let server_count = self.servers.len();
         let removed_count = initial_count - server_count;

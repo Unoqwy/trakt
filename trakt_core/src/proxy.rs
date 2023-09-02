@@ -3,6 +3,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Context;
+use uuid::Uuid;
 
 use crate::{
     config::RuntimeConfigProvider,
@@ -36,8 +37,11 @@ pub trait ProxyServer: Send + Sync {
     /// otherwise it wil return an error.
     async fn run(self: Arc<Self>) -> anyhow::Result<()>;
 
-    /// Returns the backends known/managed by the proxy server.
+    /// Gets all the backends known/managed by the proxy server.
     async fn get_backends(&self) -> Vec<Arc<Backend>>;
+
+    /// Gets a backend by UID.
+    async fn get_backend(&self, uid: &Uuid) -> Option<Arc<Backend>>;
 }
 
 impl<S> Proxy<S>

@@ -1,0 +1,27 @@
+<div class="flex">
+  {% let classname %}
+  {% match server.status %}
+    {% when model::ServerStatus::Active %}
+      {% let classname = "bg-sky-300" %}
+    {% when model::ServerStatus::Stale %}
+      {% let classname = "bg-orange-300" %}
+  {% endmatch %}
+  <div class="px-2 py-1 flex items-center uppercase text-sm font-medium {{ classname }}">
+    <span>{{ server.status }}</span>
+  </div>
+  <div class="grow px-2 py-1 flex gap-2 bg-stone-100">
+    <div class="grow flex items-center gap-1">
+      <span>{{ server.address }}</span>
+      <div class="text-sm uppercase">
+      {% if server.health.alive %}
+      <span class="text-green-700">OK</span>
+      {% else %}
+      <span class="text-red-700">not alive {% if !server.health.ever_alive -%}
+        (never was)
+      {%- endif %}</span>
+      {% endif %}
+      </div>
+    </div>
+    <div>load: {{ server.load_score }} - players: {{ server.player_count }}</div>
+  </div>
+</div>

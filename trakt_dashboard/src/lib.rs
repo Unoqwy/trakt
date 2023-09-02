@@ -2,50 +2,34 @@
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use askama::Template;
-use axum::{extract::State, routing, Router};
-use tower_livereload::LiveReloadLayer;
-use trakt_api::{model, provider::TraktApiRead};
+use axum::Router;
+use trakt_api::provider::TraktApi;
 
-#[derive(Template)]
-#[template(path = "index.html")]
-struct IndexTemplate {
-    backends: Vec<model::Backend>,
+mod status;
+
+pub type SharedEnv = Arc<AppEnv>;
+
+pub struct AppEnv {
+    pub api: Box<dyn TraktApi>,
 }
 
-#[derive(Template)]
-#[template(path = "status.html")]
-struct StatusPartialTemplate {
-    backends: Vec<model::Backend>,
-}
+/// Starts the Web dashboard server.
+///
+/// ## Arguments
+///
+/// * `bind` - Address to bind to
+/// * `api` - API implementation to use
+pub async fn start(bind: &str, api: Box<dyn TraktApi>) -> anyhow::Result<()> {
+    let env = AppEnv { api };
+    let env = Arc::new(env);
 
-struct AppState {
-    read_api: Box<dyn TraktApiRead>,
-}
+    let router = Router::new()
+        .nest("/status", status::routes())
+        .with_state(env);
 
-pub async fn start(read_api: Box<dyn TraktApiRead>) -> anyhow::Result<()> {
-    let state = AppState { read_api };
-    let state = Arc::new(state);
-
-    let app = Router::new()
-        .route("/status", routing::get(status))
-        .route("/status/_partial", routing::get(status_partial))
-        .with_state(state);
-        //.layer(LiveReloadLayer::new());
-
-    let bind_addr = SocketAddr::from_str("0.0.0.0:8081")?;
+    let bind_addr = SocketAddr::from_str(bind)?;
     axum::Server::bind(&bind_addr)
-        .serve(app.into_make_service())
+        .serve(router.into_make_service())
         .await?;
     Ok(())
-}
-
-async fn status(State(state): State<Arc<AppState>>) -> IndexTemplate {
-    let backends = state.read_api.get_backends().await;
-    IndexTemplate { backends }
-}
-
-async fn status_partial(State(state): State<Arc<AppState>>) -> StatusPartialTemplate {
-    let backends = state.read_api.get_backends().await;
-    StatusPartialTemplate { backends }
 }

@@ -1,17 +1,15 @@
 use std::{path::PathBuf, process::exit, str::FromStr, sync::Arc};
 
 use clap::Parser;
-use futures::future;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use tokio::io::AsyncBufReadExt;
-use trakt_api::{model, provider::TraktApiRead};
 use trakt_core::{
-    api::IntoApiModel,
+    api::SingleProxyApi,
     bedrock::{snapshot::RaknetProxySnapshot, RaknetProxyServer},
     config::{LoadBalanceMethod, RuntimeConfig, RuntimeConfigProvider},
     snapshot::{self, RecoverableProxyServer},
-    Backend, DefaultLoadBalancer, Proxy, ProxyServer,
+    Backend, DefaultLoadBalancer, Proxy,
 };
 
 mod config;
@@ -132,7 +130,8 @@ async fn main() {
         },
         config_provider.clone(),
         config.as_ref().map(|config| &config.backend),
-    ).await;
+    )
+    .await;
     log::info!("Loaded {} backend servers", load_result.server_count);
     let proxy_server = RaknetProxyServer::bind(
         bind_address,
@@ -165,31 +164,27 @@ async fn main() {
         });
     }
 
+    #[derive(Debug, Clone)]
+    struct DoubleError;
+
+    impl std::error::Error for DoubleError {}
+
+    impl std::fmt::Display for DoubleError {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "invalid first item to double")
+        }
+    }
+
     tokio::spawn({
         let proxy = proxy.clone();
         async move {
-            struct Api(Arc<Proxy<RaknetProxyServer>>);
+            let api = SingleProxyApi::new("node1", proxy.server.clone());
+            trakt_dashboard::start("0.0.0.0:8081", Box::new(api))
+                .await
+                .unwrap();
+        }
+    });
 
-            #[async_trait::async_trait]
-            impl TraktApiRead for Api {
-                async fn get_backends(&self) -> Vec<model::Backend> {
-                    let iter = self
-                        .0
-                        .server
-                        .get_backends()
-                        .await
-                        .into_iter()
-                        .map(|backend| async move { backend.into_api_model().await });
-                    future::join_all(iter).await
-                }
-
-                async fn get_backend(&self, id: &str) -> Option<model::Backend> {
-                    None
-                }
-            }
-
-            let api = Box::new(Api(proxy));
-            trakt_dashboard::start(api).await.unwrap();
         }
     });
 

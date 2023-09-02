@@ -141,10 +141,8 @@ impl LoadBalancer for DefaultLoadBalancer {
                 for server in state.servers.iter() {
                     let state = server.state.read().await;
                     if state.load_score < min_load {
-                        if respect_alive_status {
-                            if !state.health.alive {
-                                continue;
-                            }
+                        if respect_alive_status && !state.health.alive {
+                            continue;
                         }
                         min_load = state.load_score;
                         target = Some(server.clone());

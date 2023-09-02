@@ -8,7 +8,7 @@ license = "MIT"
 [dependencies]
 trakt_core = { path = "./trakt_core" }
 trakt_api = { path = "./trakt_api" }
-trakt_dashboard = { path = "./trakt_dashboard" }
+trakt_dashboard = { path = "./trakt_dashboard", optional = true }
 
 log = "0.4.20"
 anyhow = "1.0"
@@ -19,6 +19,7 @@ clap = { version = "4.3", features = ["derive"] }
 simple_logger = "4.2"
 
 serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "1.4", features = ["v4", "serde"] }
 toml = "0.7"
 
 fdlimit = "0.2.1"

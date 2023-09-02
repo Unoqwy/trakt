@@ -1,12 +1,13 @@
 [package]
 name = "trakt_dashboard"
-description = "Web dashboard for Trakt"
+description = "Web dashboard for Trakt (Minecraft reverse proxy and load balancer)"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
 [dependencies]
 trakt_api = { path = "../trakt_api" }
+trakt_webapi = { path = "../trakt_webapi" }
 
 log = "0.4.20"
 anyhow = "1.0"
@@ -18,6 +19,7 @@ askama = { version = "0.12", features = ["with-axum"] }
 askama_axum = "0.3"
 tower-livereload = "0.8.1"
 
+uuid = { version = "1.4", features = ["v4", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

@@ -11,13 +11,13 @@ pub enum GameEdition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proxy {
+pub struct Node {
     /// API unique ID.
     pub uid: Uuid,
-    /// Proxy name.
+    /// Node name.
     pub name: String,
-    /// Backends.
-    pub backends: Vec<Backend>,
+    /// Backends. [`None`] if not hydrated.
+    pub backends: Option<Vec<Backend>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,8 +28,8 @@ pub struct Backend {
     pub name: String,
     /// Game edition.
     pub game_edition: GameEdition,
-    /// Servers.
-    pub servers: Vec<Server>,
+    /// Servers. [`None`] if not hydrated.
+    pub servers: Option<Vec<Server>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +38,8 @@ pub struct Server {
     pub uid: Uuid,
     /// Remote server address.
     pub address: String,
+    /// Whether the remote server uses proxy protocol.
+    pub proxy_protocol: bool,
     /// Server status.
     pub status: ServerStatus,
     /// Server health.

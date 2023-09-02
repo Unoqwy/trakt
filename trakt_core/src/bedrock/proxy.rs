@@ -16,6 +16,7 @@ use tokio::{
     net::{ToSocketAddrs, UdpSocket},
     sync::{mpsc, RwLock, Semaphore},
 };
+use uuid::Uuid;
 
 use crate::{
     config::RuntimeConfigProvider, snapshot::RecoverableProxyServer, Backend, BackendPlatform,
@@ -333,6 +334,14 @@ impl ProxyServer for RaknetProxyServer {
             Vec::new()
         }
     }
+
+    async fn get_backend(&self, uid: &Uuid) -> Option<Arc<Backend>> {
+        let backend = self.backend.read().await;
+        backend
+            .as_ref()
+            .filter(|backend| backend.uid.eq(uid))
+            .cloned()
+    }
 }
 
 #[async_trait::async_trait]
@@ -414,6 +423,7 @@ impl RecoverableProxyServer for RaknetProxyServer {
                             log::debug!("Recovering server {} on stale instance", server_addr);
                             let server = Arc::new(BackendServer::new(
                                 server_addr,
+                                true,
                                 client.server_proxy_protocol,
                             ));
                             backend_state.register_server(server.clone(), true);

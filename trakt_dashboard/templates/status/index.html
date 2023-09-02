@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Status - Trakt Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.5" integrity="sha384-xcuj3WpfgjlKF+FXhSQFQ0ZNr39ln+hwjN3npfM9VBnUskLolQAcN80McRIVOPuO" crossorigin="anonymous"></script>
+  </head>
+  <body class="text-stone-800 bg-stone-50 px-4 py-2">
+    <div class="flex justify-between text-lg text-slate-800 mb-2">
+      <div class="flex gap-2">
+        <a href="/status" class="underline">Status</a>
+        <a href="/config">Config</a>
+      </div>
+      <div class="flex gap-2">
+        <a href="/logout">Log out</a>
+      </div>
+    </div>
+    <div hx-get="/status/_hx_refresh" hx-trigger="every 2s" hx-swap="innerHTML">
+      {% include "status/_inner.html" %}
+    </div>
+  </body>
+</html>

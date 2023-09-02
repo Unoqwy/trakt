@@ -1,0 +1,32 @@
+<h2 class="text-2xl">Status</h2>
+<p class="text-lg text-gray-600 leading-none mb-2">
+  Overview of nodes, backends, and servers currently running.
+  <br />
+  This is a reflection of current state, not the configuration.
+</p>
+<div class="flex flex-col gap-4">
+  {% for node_result in nodes %}
+  {% match node_result %}
+    {% when Ok with (node) %}
+      {% for backend in node.backends|or_emptyvec %}
+      <div>
+        <h3 class="text-xl"><span class="text-sky-700">{{ node.name }}</span>::<span class="text-gray-600">{{ backend.name }}</span></h3>
+        <div>
+          Game Edition: {{ backend.game_edition }}
+        </div>
+        <div class="flex flex-col gap-0.5">
+          {% for server in backend.servers|or_emptyvec %}
+            {% include "status/_server_entry.html" %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    {% when Err with (err) %}
+      <div>
+        <h3 class="text-xl"><span class="text-red-600">{{ err.node_name }}</span></h3>
+        <span>An error occurred while contacting the node.</span>
+        <p class="text-red-800">{{ err.inner }}</p>
+      </div>
+  {% endmatch %}
+  {% endfor %}
+</div>
