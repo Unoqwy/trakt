@@ -2,7 +2,7 @@
 
 Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 
-**WARNING: This is brand new. Reliability/performance claims may not yet be true.**
+**Development branch! Things will change and break.** Stay on master branch for now.
 
 ## Features
 
@@ -12,6 +12,9 @@ Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 - Health checks (ping) to not send players to servers that are down
 - Dynamic configuration reload
 - Ability to restart and recover active connections (provided it restarts within a few seconds)
+- REST API
+- Web dashboard
+- Low resources usage
 
 ## Installation
 
@@ -45,11 +48,12 @@ To create the config file, it's recommended to copy [config.example.toml](./conf
 
 ### Reloading
 
-The configuration can be reloaded without restarting trakt. To do so, type `reload` in the program's console.
+To reload the configuration without restart, you can:
+* Type `reload` in the console
+* Click a button on the web-based dashboard (WIP)
 
 ### As a library
 
-If you need a custom load balancer to integrate with the rest of your infrastructure, this porject can be used as a library to build on top of.
+If you need a custom load balancer to integrate with the rest of your infrastructure, this project can be used as a library to build on top of.
 
-Your starting point should be adding `trakt_core` as a dependency. You can then look at documentation, and check out how trakt itself uses the library [here](./src).
-
+Your starting point should be adding `trakt_core` as a dependency. Then, you can look at the documentation, and check out how trakt itself uses the library [here](./src).
