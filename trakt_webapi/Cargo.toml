@@ -3,18 +3,22 @@ name = "trakt_webapi"
 description = "REST API for trakt"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 publish = false
 
 [dependencies]
-trakt_api = { path = "../trakt_api" }
+trakt_api = { path = "../trakt_api", features = ["utoipa_schemas"] }
 
 log = "0.4.20"
 anyhow = "1.0"
 tokio = { version = "1.32", features = ["full"] }
 
 axum = "0.6.20"
+utoipa = { version = "3.5", features = ["axum_extras", "uuid", "time"] }
+utoipa-swagger-ui = { version = "3.1", features = ["axum"] }
 
 uuid = { version = "1.4", features = ["v4", "serde"] }
+time = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 

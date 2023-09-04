@@ -28,9 +28,7 @@ pub struct NodeError {
 
 /// API abstraction.
 ///
-/// A node is a instance of a proxy, that can run anywhere.
-/// For example, several nodes can run on the same machine,
-/// and even more run on different machines.
+/// See docs of [`Node`] to understand that concept.
 #[async_trait::async_trait]
 pub trait TraktApi: Send + Sync {
     /// Gets all nodes.
@@ -86,7 +84,7 @@ pub trait TraktApi: Send + Sync {
     /// ## Arguments
     ///
     /// * `server_path` - Resource path to the server
-    async fn clear_constraints(&self, server_path: &ServerRefPath) -> Result<(), NodeError>;
+    async fn clear_server_constraints(&self, server_path: &ServerRefPath) -> Result<(), NodeError>;
 
     /// Clears a server's constraints.
     ///
@@ -95,7 +93,7 @@ pub trait TraktApi: Send + Sync {
     /// * `server_path` - Resource path to the server
     /// * `key` - Constraint key
     /// * `constraint` - Constraint. If [`None`] it will remove it
-    async fn set_constraint(
+    async fn set_server_constraint(
         &self,
         server_path: &ServerRefPath,
         key: &str,
@@ -116,5 +114,3 @@ pub trait TraktConfigApi: Send + Sync {
     /// * `node_uid` - Node to reload the configuration of
     async fn reload_node(&self, node_uid: &Uuid) -> Result<(), NodeError>;
 }
-
-impl ResourceRef {}

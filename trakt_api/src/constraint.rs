@@ -1,18 +1,26 @@
 use std::{collections::HashMap, time::SystemTime};
 
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 /// A constraint put on a server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub struct Constraint {
     /// What kind of constraint is this.
     kind: ConstraintKind,
     /// When the constraint will be automatically lifted.
-    /// If [`None`], it will need to be lifted manually.
-    until: Option<SystemTime>,
+    /// If null, it will need to be lifted manually.
+    #[cfg_attr(
+        feature = "utoipa_schemas",
+        serde(with = "time::serde::rfc3339::option")
+    )]
+    until: Option<OffsetDateTime>,
 }
 
+/// The kind of a constraint put on a server.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub enum ConstraintKind {
     /// Disabled. Load balancer will ignore this server.
     Disabled,

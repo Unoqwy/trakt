@@ -2,15 +2,15 @@
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    routing::get,
-    Json, Router,
-};
-use trakt_api::{model, provider::TraktApi, HydrateOptions, ResourceRef};
+use axum::{routing::get, Router};
+use trakt_api::{constraint, model, provider::TraktApi};
 
-use uuid::Uuid;
+mod path;
+mod resources;
+
+pub use path::*;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 pub type SharedEnv = Arc<AppEnv>;
 
@@ -25,12 +25,42 @@ pub struct AppEnv {
 /// * `bind` - Address to bind to
 /// * `api` - API implementation to use
 pub async fn start(bind: &str, api: Box<dyn TraktApi>) -> anyhow::Result<()> {
+    #[derive(OpenApi)]
+    #[openapi(
+        servers(
+            (url = "/v1"),
+        ),
+        paths(
+            resources::nodes,
+            resources::node,
+            resources::backend,
+            resources::server,
+        ),
+        components(
+            schemas(
+                UntaggedResourceRef,
+                model::GameEdition,
+                model::Node,
+                model::Backend,
+                model::Server, model::ServerStatus, model::ServerHealth,
+                constraint::Constraint, constraint::ConstraintKind,
+            ),
+        ),
+    )]
+    struct ApiDoc;
+
     let env = AppEnv { api };
     let env = Arc::new(env);
 
+    let v1 = Router::new()
+        .route("/nodes", get(resources::nodes))
+        .route("/resource/:node", get(resources::node))
+        .route("/resource/:node/:backend", get(resources::backend))
+        .route("/resource/:node/:backend/:server", get(resources::server));
+
     let router = Router::new()
-        .route("/nodes", get(nodes))
-        .route("/node/:node", get(node))
+        .merge(SwaggerUi::new("/v1/swagger-ui").url("/v1/openapi.json", ApiDoc::openapi()))
+        .nest("/v1", v1)
         .with_state(env);
 
     let bind_addr = SocketAddr::from_str(bind)?;
@@ -38,24 +68,4 @@ pub async fn start(bind: &str, api: Box<dyn TraktApi>) -> anyhow::Result<()> {
         .serve(router.into_make_service())
         .await?;
     Ok(())
-}
-
-async fn nodes(State(env): State<SharedEnv>) -> Json<Vec<model::Node>> {
-    let nodes = env.api.get_nodes(HydrateOptions::all()).await;
-    let nodes = nodes.into_iter().filter_map(|node| node.ok()).collect();
-    Json(nodes)
-}
-
-async fn node(
-    Path(node_id): Path<Uuid>,
-    State(env): State<SharedEnv>,
-) -> (StatusCode, Json<Option<model::Node>>) {
-    let node = env
-        .api
-        .get_node(&ResourceRef::by_uid(node_id), HydrateOptions::all())
-        .await;
-    match node {
-        Ok(node @ Some(_)) => (StatusCode::OK, Json(node)),
-        _ => (StatusCode::NOT_FOUND, Json(None)),
-    }
 }

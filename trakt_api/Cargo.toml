@@ -3,6 +3,7 @@ name = "trakt_api"
 description = "API to control trakt proxies"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 publish = false
 
 [dependencies]
@@ -10,6 +11,13 @@ log = "0.4.20"
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 uuid = { version = "1.4", features = ["v4", "serde"] }
+
+time = { version = "0.3" }
+utoipa = { version = "3.5", optional = true }
+
+[features]
+default = []
+utoipa_schemas = ["dep:utoipa", "time/serde-human-readable"]
 
 [dependencies.async-trait]
 git = "https://github.com/Unoqwy/async-trait"

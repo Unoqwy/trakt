@@ -123,7 +123,7 @@ where
         }
     }
 
-    async fn clear_constraints(&self, server_path: &ServerRefPath) -> Result<(), NodeError> {
+    async fn clear_server_constraints(&self, server_path: &ServerRefPath) -> Result<(), NodeError> {
         if let Some(server) = self.find_server(server_path).await {
             let mut state = server.state.write().await;
             state.constraints.clear_all();
@@ -131,7 +131,7 @@ where
         Ok(())
     }
 
-    async fn set_constraint(
+    async fn set_server_constraint(
         &self,
         server_path: &ServerRefPath,
         key: &str,

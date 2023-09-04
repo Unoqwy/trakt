@@ -8,22 +8,32 @@ use crate::constraint::Constraint;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub enum GameEdition {
     /// Bedrock Edition.
     Bedrock,
 }
 
+/// A node is an instance of a proxy, that could be running anywhere.
+/// For example, running the default binary will start a node.
+/// Several nodes can run on the same machine, just like nodes
+/// can run across different machines.
+/// By default, each node exposes its own REST API and a master controller
+/// can be used to merge them behind a unique REST API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub struct Node {
     /// API unique ID.
     pub uid: Uuid,
     /// Node name.
     pub name: String,
-    /// Backends. [`None`] if not hydrated.
+    /// Backends. Null if not hydrated.
     pub backends: Option<Vec<Backend>>,
 }
 
+/// A backend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub struct Backend {
     /// API unique ID.
     pub uid: Uuid,
@@ -31,11 +41,13 @@ pub struct Backend {
     pub name: String,
     /// Game edition.
     pub game_edition: GameEdition,
-    /// Servers. [`None`] if not hydrated.
+    /// Servers. Null if not hydrated.
     pub servers: Option<Vec<Server>>,
 }
 
+/// A backend server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub struct Server {
     /// API unique ID.
     pub uid: Uuid,
@@ -54,12 +66,14 @@ pub struct Server {
     /// Only accounts for players connected through the proxy,
     /// more may be online if connected from other sources.
     pub player_count: usize,
-    /// Constraints. [`None`] if not hydrated.
+    /// Constraints. Null if not hydrated.
     pub constraints: Option<HashMap<String, Constraint>>,
 }
 
+/// Status of a server regarding its joinability.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub enum ServerStatus {
     /// The server is active.
     Active,
@@ -67,7 +81,9 @@ pub enum ServerStatus {
     Stale,
 }
 
+/// Health status of a server.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub struct ServerHealth {
     /// Whether the server is alive, and joinable.
     pub alive: bool,
