@@ -7,6 +7,7 @@ use std::{
 
 use rand::Rng;
 use tokio::sync::RwLock;
+use trakt_api::constraint::Constraints;
 use uuid::Uuid;
 
 use crate::{
@@ -85,6 +86,8 @@ pub struct BackendServerState {
     pub load_score: usize,
     /// Online players.
     pub connected_players: HashSet<SocketAddr>,
+    /// Constraints.
+    pub constraints: Constraints,
 }
 
 /// A [`MotdSource`] is similar to a [`BackendServer`],

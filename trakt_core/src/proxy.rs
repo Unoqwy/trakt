@@ -3,7 +3,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Context;
-use uuid::Uuid;
+use trakt_api::ResourceRef;
 
 use crate::{
     config::RuntimeConfigProvider,
@@ -40,8 +40,8 @@ pub trait ProxyServer: Send + Sync {
     /// Gets all the backends known/managed by the proxy server.
     async fn get_backends(&self) -> Vec<Arc<Backend>>;
 
-    /// Gets a backend by UID.
-    async fn get_backend(&self, uid: &Uuid) -> Option<Arc<Backend>>;
+    /// Gets a backend by resource reference.
+    async fn get_backend(&self, backend_ref: &ResourceRef) -> Option<Arc<Backend>>;
 }
 
 impl<S> Proxy<S>

@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::constraint::Constraint;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -51,6 +54,8 @@ pub struct Server {
     /// Only accounts for players connected through the proxy,
     /// more may be online if connected from other sources.
     pub player_count: usize,
+    /// Constraints. [`None`] if not hydrated.
+    pub constraints: Option<HashMap<String, Constraint>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

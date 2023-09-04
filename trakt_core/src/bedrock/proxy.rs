@@ -16,7 +16,7 @@ use tokio::{
     net::{ToSocketAddrs, UdpSocket},
     sync::{mpsc, RwLock, Semaphore},
 };
-use uuid::Uuid;
+use trakt_api::ResourceRef;
 
 use crate::{
     config::RuntimeConfigProvider, snapshot::RecoverableProxyServer, Backend, BackendPlatform,
@@ -335,11 +335,14 @@ impl ProxyServer for RaknetProxyServer {
         }
     }
 
-    async fn get_backend(&self, uid: &Uuid) -> Option<Arc<Backend>> {
+    async fn get_backend(&self, backend_ref: &ResourceRef) -> Option<Arc<Backend>> {
         let backend = self.backend.read().await;
         backend
             .as_ref()
-            .filter(|backend| backend.uid.eq(uid))
+            .filter(|backend| match backend_ref {
+                ResourceRef::Uid(uid) => backend.uid.eq(uid),
+                ResourceRef::Name(name) => backend.id.eq(name),
+            })
             .cloned()
     }
 }

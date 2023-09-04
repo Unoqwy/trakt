@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{extract::State, routing::get, Router};
-use trakt_api::{model, provider::NodeError};
+use trakt_api::{model, provider::NodeError, HydrateOptions};
 
 use crate::SharedEnv;
 
@@ -32,11 +32,11 @@ pub fn routes() -> Router<SharedEnv> {
 }
 
 async fn index(State(env): State<SharedEnv>) -> IndexTemplate {
-    let nodes = env.api.get_nodes(true).await;
+    let nodes = env.api.get_nodes(HydrateOptions::all()).await;
     IndexTemplate { nodes }
 }
 
 async fn hx_refresh(State(env): State<SharedEnv>) -> HxInnerTemplate {
-    let nodes = env.api.get_nodes(true).await;
+    let nodes = env.api.get_nodes(HydrateOptions::all()).await;
     HxInnerTemplate { nodes }
 }

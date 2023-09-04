@@ -2,8 +2,13 @@
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use axum::{extract::{State, Path}, routing::get, Json, Router, http::StatusCode};
-use trakt_api::{model, provider::TraktApi};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    routing::get,
+    Json, Router,
+};
+use trakt_api::{model, provider::TraktApi, HydrateOptions, ResourceRef};
 
 use uuid::Uuid;
 
@@ -36,13 +41,19 @@ pub async fn start(bind: &str, api: Box<dyn TraktApi>) -> anyhow::Result<()> {
 }
 
 async fn nodes(State(env): State<SharedEnv>) -> Json<Vec<model::Node>> {
-    let nodes = env.api.get_nodes(true).await;
+    let nodes = env.api.get_nodes(HydrateOptions::all()).await;
     let nodes = nodes.into_iter().filter_map(|node| node.ok()).collect();
     Json(nodes)
 }
 
-async fn node(Path(node_id): Path<Uuid>, State(env): State<SharedEnv>) -> (StatusCode, Json<Option<model::Node>>) {
-    let node = env.api.get_node(&node_id).await;
+async fn node(
+    Path(node_id): Path<Uuid>,
+    State(env): State<SharedEnv>,
+) -> (StatusCode, Json<Option<model::Node>>) {
+    let node = env
+        .api
+        .get_node(&ResourceRef::by_uid(node_id), HydrateOptions::all())
+        .await;
     match node {
         Ok(node @ Some(_)) => (StatusCode::OK, Json(node)),
         _ => (StatusCode::NOT_FOUND, Json(None)),
