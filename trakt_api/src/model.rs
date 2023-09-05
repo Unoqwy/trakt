@@ -18,8 +18,8 @@ pub enum GameEdition {
 /// For example, running the default binary will start a node.
 /// Several nodes can run on the same machine, just like nodes
 /// can run across different machines.
-/// By default, each node exposes its own REST API and a master controller
-/// can be used to merge them behind a unique REST API.
+/// By default, each node exposes its own HTTP API and a master controller
+/// can be used to merge them behind a unique HTTP API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub struct Node {

@@ -1,4 +1,4 @@
-//! Trakt REST API.
+//! Trakt HTTP API.
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
@@ -18,7 +18,7 @@ pub struct AppEnv {
     pub api: Box<dyn TraktApi>,
 }
 
-/// Starts the REST API server.
+/// Starts the HTTP API server.
 ///
 /// ## Arguments
 ///

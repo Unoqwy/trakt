@@ -189,7 +189,7 @@ async fn main() {
         let proxy = proxy.clone();
         async move {
             let api = SingleProxyApi::new("node1", proxy.server.clone());
-            trakt_webapi::start("0.0.0.0:8084", Box::new(api))
+            trakt_http_api::start("0.0.0.0:8084", Box::new(api))
                 .await
                 .unwrap();
         }

@@ -10,14 +10,14 @@ Find out more about the main binary [here](../README.md).
 
 ### Configuration
 
-The dashboard works by calling the REST API of one or more nodes.
+The dashboard works by calling the HTTP API of one or more nodes.
 
 ```toml
 [dashboard]
 # Address to start the Web Dashboard server on.
 bind = "0.0.0.0:8081"
 
-# List of proxies and their REST API URLs.
+# List of nodes and their HTTP API URLs.
 proxies = [
   { name = "main", api_url =  "http://0.0.0.0:8084/v1" },
 ]

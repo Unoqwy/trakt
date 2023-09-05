@@ -1,6 +1,6 @@
 [package]
-name = "trakt_webapi"
-description = "REST API for trakt"
+name = "trakt_http_api"
+description = "HTTP API for trakt"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"

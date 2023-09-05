@@ -12,7 +12,7 @@ Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 - Health checks (ping) to not send players to servers that are down
 - Dynamic configuration reload
 - Ability to restart and recover active connections (provided it restarts within a few seconds)
-- REST API
+- HTTP API
 - Web dashboard
 - Low resources usage
 

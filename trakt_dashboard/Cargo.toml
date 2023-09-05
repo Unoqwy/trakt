@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 trakt_api = { path = "../trakt_api" }
-trakt_webapi = { path = "../trakt_webapi" }
+trakt_http_api = { path = "../trakt_http_api" }
 
 log = "0.4.20"
 anyhow = "1.0"
