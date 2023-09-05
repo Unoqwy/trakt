@@ -3,6 +3,7 @@ name = "trakt_dashboard"
 description = "Web dashboard for Trakt (Minecraft reverse proxy and load balancer)"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 publish = false
 
 [dependencies]

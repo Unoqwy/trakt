@@ -1,19 +1,8 @@
 use serde::{Deserialize, Serialize};
 use trakt_api::ResourceRef;
-use utoipa::ToSchema;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged, remote = "ResourceRef")]
-#[derive(ToSchema)]
-#[schema(as = ResourceRef)]
-pub enum UntaggedResourceRef {
-    Uid(Uuid),
-    Name(String),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PathResourceRef(#[serde(with = "UntaggedResourceRef")] pub ResourceRef);
+pub struct PathResourceRef(pub ResourceRef);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendRefParams {

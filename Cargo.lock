@@ -1518,6 +1518,7 @@ dependencies = [
  "async-trait 0.1.73 (git+https://github.com/Unoqwy/async-trait?rev=4ac94682269f366ee3c8bb83332616a656b77d5c)",
  "log",
  "serde",
+ "serde_json",
  "time",
  "utoipa",
  "uuid",
@@ -1575,6 +1576,7 @@ dependencies = [
  "tokio",
  "trakt_api",
  "utoipa",
+ "utoipa-rapidoc",
  "utoipa-swagger-ui",
  "uuid",
 ]
@@ -1647,6 +1649,18 @@ dependencies = [
  "regex",
  "syn 2.0.29",
  "uuid",
+]
+
+[[package]]
+name = "utoipa-rapidoc"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e5b9ebae0a8e5860e19ddaae755f5caade84b2de93cfde1c88d8c8d1da62843"
+dependencies = [
+ "axum",
+ "serde",
+ "serde_json",
+ "utoipa",
 ]
 
 [[package]]

@@ -14,8 +14,9 @@ anyhow = "1.0"
 tokio = { version = "1.32", features = ["full"] }
 
 axum = "0.6.20"
-utoipa = { version = "3.5", features = ["axum_extras", "uuid", "time"] }
+utoipa = { version = "3.5", features = ["axum_extras", "uuid", "time", "preserve_order"] }
 utoipa-swagger-ui = { version = "3.1", features = ["axum"] }
+utoipa-rapidoc = { version = "0.1", features = ["axum"] }
 
 uuid = { version = "1.4", features = ["v4", "serde"] }
 time = "0.3"

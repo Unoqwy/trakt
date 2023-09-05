@@ -18,9 +18,8 @@ The dashboard works by calling the HTTP API of one or more nodes.
 bind = "0.0.0.0:8081"
 
 # List of nodes and their HTTP API URLs.
-proxies = [
+nodes = [
   { name = "main", api_url =  "http://0.0.0.0:8084/v1" },
 ]
-
 ```
 

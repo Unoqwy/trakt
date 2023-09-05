@@ -29,6 +29,12 @@ fdlimit = "0.2.1"
 git = "https://github.com/Unoqwy/async-trait"
 rev = "4ac94682269f366ee3c8bb83332616a656b77d5c"
 
+[features]
+default = ["http_api", "dashboard"]
+full = ["http_api", "dashboard"]
+http_api = ["dep:trakt_http_api"]
+dashboard = ["dep:trakt_dashboard"]
+
 [[bin]]
 path = "src/main.rs"
 name = "trakt"

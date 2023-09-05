@@ -52,6 +52,7 @@ pub struct Server {
     /// API unique ID.
     pub uid: Uuid,
     /// Remote server address.
+    #[cfg_attr(feature = "utoipa_schemas", schema(example = "127.0.0.1:19132"))]
     pub address: String,
     /// Whether the remote server uses proxy protocol.
     pub proxy_protocol: bool,
@@ -59,7 +60,7 @@ pub struct Server {
     pub status: ServerStatus,
     /// Server health.
     pub health: ServerHealth,
-    /// Load score.
+    /// Load score. Used for load balancing.
     pub load_score: usize,
     /// Number of online players.
     ///
@@ -70,7 +71,7 @@ pub struct Server {
     pub constraints: Option<HashMap<String, Constraint>>,
 }
 
-/// Status of a server regarding its joinability.
+/// Status of a server regarding its expected state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]

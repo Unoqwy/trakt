@@ -2,15 +2,19 @@
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use axum::{routing::get, Router};
-use trakt_api::{constraint, model, provider::TraktApi};
+use axum::{
+    routing::{delete, get, put},
+    Router,
+};
+use trakt_api::{constraint, model, provider::TraktApi, ResourceRef};
+use utoipa::OpenApi;
+use utoipa_rapidoc::RapiDoc;
+use utoipa_swagger_ui::SwaggerUi;
 
 mod path;
 mod resources;
 
 pub use path::*;
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
 pub type SharedEnv = Arc<AppEnv>;
 
@@ -27,18 +31,24 @@ pub struct AppEnv {
 pub async fn start(bind: &str, api: Box<dyn TraktApi>) -> anyhow::Result<()> {
     #[derive(OpenApi)]
     #[openapi(
+        info(
+            title = "Trakt API",
+            description = include_str!("../description.md"),
+        ),
         servers(
-            (url = "/v1"),
+            (url = "/v0", description = "Beta version, subject to breaking changes"),
         ),
         paths(
             resources::nodes,
             resources::node,
             resources::backend,
             resources::server,
+            resources::delete_server_constraints,
+            resources::put_server_constraint,
         ),
         components(
             schemas(
-                UntaggedResourceRef,
+                ResourceRef,
                 model::GameEdition,
                 model::Node,
                 model::Backend,
@@ -46,21 +56,33 @@ pub async fn start(bind: &str, api: Box<dyn TraktApi>) -> anyhow::Result<()> {
                 constraint::Constraint, constraint::ConstraintKind,
             ),
         ),
+        tags(
+            (name = "resources", description = "View and control active resources (nodes, backends, servers)")
+        ),
     )]
     struct ApiDoc;
 
     let env = AppEnv { api };
     let env = Arc::new(env);
 
-    let v1 = Router::new()
+    let v0 = Router::new()
         .route("/nodes", get(resources::nodes))
-        .route("/resource/:node", get(resources::node))
-        .route("/resource/:node/:backend", get(resources::backend))
-        .route("/resource/:node/:backend/:server", get(resources::server));
+        .route("/nodes/:node", get(resources::node))
+        .route("/nodes/:node/:backend", get(resources::backend))
+        .route("/nodes/:node/:backend/:server", get(resources::server))
+        .route(
+            "/nodes/:node/:backend/:server/constraints",
+            delete(resources::delete_server_constraints),
+        )
+        .route(
+            "/nodes/:node/:backend/:server/constraints/:constraint",
+            put(resources::put_server_constraint),
+        );
 
     let router = Router::new()
-        .merge(SwaggerUi::new("/v1/swagger-ui").url("/v1/openapi.json", ApiDoc::openapi()))
-        .nest("/v1", v1)
+        .merge(SwaggerUi::new("/v0/swagger-ui").url("/v0/openapi.json", ApiDoc::openapi()))
+        .merge(RapiDoc::new("/v0/openapi.json").path("/v0/rapidoc"))
+        .nest("/v0", v0)
         .with_state(env);
 
     let bind_addr = SocketAddr::from_str(bind)?;

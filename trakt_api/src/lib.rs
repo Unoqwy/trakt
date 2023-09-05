@@ -10,15 +10,25 @@ pub mod provider;
 
 /// A reference to an API resource (node, backend, server).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "utoipa_schemas", serde(untagged))]
+#[cfg_attr(feature = "utoipa_schemas", derive(utoipa::ToSchema))]
 pub enum ResourceRef {
     /// Reference by API UID.
+    ///
+    /// A resource UID is not guaranteed to be consistent across restarts.
+    /// In fact, the default behavior is to generate them randomly
+    /// when a node first loads a resource and not persist them across restarts.
+    /// It provides a way to reference the exact same resource, and avoids
+    /// name reference conflicts.
     Uid(Uuid),
     /// Reference by name/slug.
+    ///
+    /// Use this over UIDs for permanent paths, provided all your resources
+    /// are properly set up.
     ///
     /// If several of the same resources use the same name in the same scope
     /// (e.g. two servers with the same name in the same backend),
     /// this may cause inconsistent behavior.
-    /// Prefer using UUIDs unless you certain everything is setup properly.
     Name(String),
 }
 
