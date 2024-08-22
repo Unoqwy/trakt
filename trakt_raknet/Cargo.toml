@@ -1,6 +1,6 @@
 [package]
 name = "trakt_raknet"
-description = "Raknet Protocol partial implementation for use in trakt"
+description = "Raknet Protocol partial implementation for internal use in trakt"
 version = "1.0.0"
 edition = "2021"
 license = "MIT"

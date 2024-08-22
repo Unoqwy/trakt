@@ -2,7 +2,8 @@
 
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use axum::Router;
+use axum::response::Redirect;
+use axum::{routing, Router};
 use trakt_api::provider::TraktApi;
 
 mod status;
@@ -10,7 +11,7 @@ mod status;
 pub type SharedEnv = Arc<AppEnv>;
 
 pub struct AppEnv {
-    pub api: Box<dyn TraktApi>,
+    pub api: Arc<dyn TraktApi>,
 }
 
 /// Starts the Web dashboard server.
@@ -19,12 +20,16 @@ pub struct AppEnv {
 ///
 /// * `bind` - Address to bind to
 /// * `api` - API implementation to use
-pub async fn start(bind: &str, api: Box<dyn TraktApi>) -> anyhow::Result<()> {
+pub async fn start(bind: &str, api: Arc<dyn TraktApi>) -> anyhow::Result<()> {
     let env = AppEnv { api };
     let env = Arc::new(env);
 
     let router = Router::new()
         .nest("/status", status::routes())
+        .route(
+            "/",
+            routing::get(|| async { Redirect::permanent("/status") }),
+        )
         .with_state(env);
 
     let bind_addr = SocketAddr::from_str(bind)?;

@@ -81,7 +81,8 @@ where
     S: ProxyServer,
 {
     async fn get_nodes(&self, hydrate_opts: HydrateOptions) -> Vec<Result<model::Node, NodeError>> {
-        vec![Ok(self.node(hydrate_opts).await)]
+        let node = Ok(self.node(hydrate_opts).await);
+        vec![node]
     }
 
     async fn get_node(

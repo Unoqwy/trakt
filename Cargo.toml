@@ -4,6 +4,8 @@ description = "Reverse proxy and load balancer for Minecraft: Bedrock Edition"
 version = "0.2.0"
 edition = "2021"
 license = "MIT"
+repository = "https://github.com/Unoqwy/trakt"
+keywords = ["minecraft", "bedrock", "proxy"]
 
 [dependencies]
 trakt_core = { path = "./trakt_core" }
@@ -47,4 +49,3 @@ members = [
   "trakt_raknet",
   "trakt_http_api",
 ]
-

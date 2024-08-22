@@ -1,4 +1,9 @@
-use std::{path::PathBuf, process::exit, str::FromStr, sync::Arc};
+use std::{
+    path::PathBuf,
+    process::exit,
+    str::FromStr,
+    sync::{Arc, Weak},
+};
 
 use clap::Parser;
 use log::LevelFilter;
@@ -11,6 +16,8 @@ use trakt_core::{
     snapshot::{self, RecoverableProxyServer},
     Backend, DefaultLoadBalancer, Proxy,
 };
+
+use trakt_core::ProxyServer as _;
 
 mod config;
 
@@ -37,6 +44,11 @@ struct Args {
     /// File to read & write the recovery snapshot to.
     #[arg(long, value_name = "FILE", default_value = ".trakt_recover")]
     recovery_snapshot_file: Option<PathBuf>,
+    /// Enable the experimental HTTP API and Web Dashboard.
+    ///
+    /// Beware, this is Work In Progress and NOT SECURE at the moment.
+    #[arg(long)]
+    experimental_dashboard: bool,
 }
 
 #[tokio::main]
@@ -164,36 +176,20 @@ async fn main() {
         });
     }
 
-    #[derive(Debug, Clone)]
-    struct DoubleError;
-
-    impl std::error::Error for DoubleError {}
-
-    impl std::fmt::Display for DoubleError {
-        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            write!(f, "invalid first item to double")
-        }
+    if args.experimental_dashboard {
+        let proxy = proxy.clone();
+        let api = Arc::new(SingleProxyApi::new("node1", proxy.server.clone()));
+        tokio::spawn({
+            let api = api.clone();
+            async move {
+                trakt_dashboard::start("0.0.0.0:8081", api).await.unwrap();
+            }
+        });
+        tokio::spawn(async move {
+            trakt_http_api::start("0.0.0.0:8084", api).await.unwrap();
+        });
+        log::info!("Started experimental Web Dashboard at http://0.0.0.0:8084");
     }
-
-    tokio::spawn({
-        let proxy = proxy.clone();
-        async move {
-            let api = SingleProxyApi::new("node1", proxy.server.clone());
-            trakt_dashboard::start("0.0.0.0:8081", Box::new(api))
-                .await
-                .unwrap();
-        }
-    });
-
-    tokio::spawn({
-        let proxy = proxy.clone();
-        async move {
-            let api = SingleProxyApi::new("node1", proxy.server.clone());
-            trakt_http_api::start("0.0.0.0:8084", Box::new(api))
-                .await
-                .unwrap();
-        }
-    });
 
     tokio::spawn({
         let proxy = proxy.clone();
@@ -244,15 +240,20 @@ async fn run_stdin_handler(proxy: Arc<Proxy<RaknetProxyServer>>, config_file: Pa
                     proxy.reload_config().await;
                 }
             }
-            // "list" | "load" => {
-            //     let overview = proxy.load_overview().await;
-            //     log::info!(
-            //         "There are {} online players ({} active clients). Breakdown: {:?}",
-            //         overview.connected_count,
-            //         overview.client_count,
-            //         overview.per_server
-            //     )
-            // }
+            "list" => {
+                let mut player_count = 0;
+
+                let backends = proxy.server.get_backends().await;
+                for backend in backends {
+                    let backend_state = backend.state.read().await;
+                    for server in backend_state.known_servers.iter().flat_map(Weak::upgrade) {
+                        let server_state = server.state.read().await;
+                        player_count += server_state.connected_players.len();
+                    }
+                }
+
+                log::info!("Online players: {}", player_count)
+            }
             _ => log::warn!("Unknown command '{}'", line),
         }
     }

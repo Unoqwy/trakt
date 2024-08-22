@@ -10,8 +10,8 @@ Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 - MOTD Caching
 - Proxy Protocol support to forward player IPs
 - Health Checks to only send players to servers that are up
-- HTTP API
-- Web-based Dashboard
+- _(WIP) HTTP API_
+- _(WIP) Web-based Dashboard_
 
 ### Bedrock
 
@@ -23,6 +23,12 @@ Reliable reverse proxy and load balancer for Minecraft: Bedrock Edition servers.
 Minecraft: Java Edition is not supported yet.
 
 ## Installation
+
+### From crates.io
+
+Make sure you have a recent version of the rust toolchain installed.
+
+Run `cargo install trakt` to build and install the latest published version.
 
 ### From source
 

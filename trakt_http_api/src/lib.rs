@@ -19,7 +19,7 @@ pub use path::*;
 pub type SharedEnv = Arc<AppEnv>;
 
 pub struct AppEnv {
-    pub api: Box<dyn TraktApi>,
+    pub api: Arc<dyn TraktApi>,
 }
 
 /// Starts the HTTP API server.
@@ -28,7 +28,7 @@ pub struct AppEnv {
 ///
 /// * `bind` - Address to bind to
 /// * `api` - API implementation to use
-pub async fn start(bind: &str, api: Box<dyn TraktApi>) -> anyhow::Result<()> {
+pub async fn start(bind: &str, api: Arc<dyn TraktApi>) -> anyhow::Result<()> {
     #[derive(OpenApi)]
     #[openapi(
         info(
